@@ -30,4 +30,5 @@ Gem::Specification.new do |spec|
 
 	spec.add_dependency "require-hooks", "~> 0.2"
 	spec.add_dependency "prism"
+	spec.add_dependency "literal"
 end
