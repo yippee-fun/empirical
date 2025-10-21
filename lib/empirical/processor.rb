@@ -107,13 +107,13 @@ class Empirical::Processor < Empirical::BaseProcessor
 				}
 			}
 
-			signature = build_typed_parameters_assertion(node)
+			type_checks = build_type_checks(node)
 
 			if node.rparen_loc
 				@annotations << [
 					start = node.rparen_loc.start_offset + 1,
 					block.opening_loc.end_offset - start,
-					";binding.assert(#{signature});__literally_returns__ = (;",
+					";#{type_checks};__literally_returns__ = (;",
 				]
 			else
 				@annotations << [
@@ -131,7 +131,9 @@ class Empirical::Processor < Empirical::BaseProcessor
 			@annotations << [
 				block.closing_loc.start_offset,
 				0,
-				";);binding.assert(__literally_returns__: #{return_type});__literally_returns__;",
+				<<~CODE,
+					;);(raise ::Empirical::TypeError.return_type_error(value: __literally_returns__, expected: #{return_type}, method_name: "#{node.name}", context: self) unless #{return_type} === __literally_returns__);__literally_returns__;
+				CODE
 			]
 
 			@annotations << [
@@ -142,7 +144,7 @@ class Empirical::Processor < Empirical::BaseProcessor
 		end
 	end
 
-	private def build_typed_parameters_assertion(node)
+	private def build_type_checks(node)
 		return unless node.parameters
 
 		if (requireds = node.parameters.requireds)&.any?
@@ -158,7 +160,7 @@ class Empirical::Processor < Empirical::BaseProcessor
 		parameters_assertions = []
 
 		if (optionals = node.parameters.optionals)&.any?
-			parameters_assertions << optionals.map do |optional|
+			optionals.each do |optional|
 				case optional
 				# typed splats, e.g.
 				# `(names = [String])` => `(*names); assert(names: _Array(String))` and
@@ -175,7 +177,8 @@ class Empirical::Processor < Empirical::BaseProcessor
 
 					# Remove the type signature (the default value)
 					@annotations << [optional.operator_loc.start_offset, value.closing_loc.end_offset - optional.operator_loc.start_offset, ""]
-					next "#{optional.name}: #{type}"
+					parameters_assertions << [optional.name, type]
+					next
 				# With default
 				in {
 					value: Prism::CallNode[
@@ -199,12 +202,12 @@ class Empirical::Processor < Empirical::BaseProcessor
 
 				value_location = optional.value.location
 				@annotations << [value_location.start_offset, value_location.end_offset - value_location.start_offset, default]
-				"#{optional.name}: #{type}"
-			end.join(", ")
+				parameters_assertions << [optional.name, type]
+			end
 		end
 
 		if (keywords = node.parameters.keywords)&.any?
-			parameters_assertions << keywords.map do |keyword|
+			keywords.each do |keyword|
 				case keyword
 				# Splat
 				in { value: Prism::HashNode[elements: [Prism::AssocNode[key: key_type_node, value: val_type_node]]] => value }
@@ -224,7 +227,8 @@ class Empirical::Processor < Empirical::BaseProcessor
 
 					# Remove the type signature (the default value) and the colon at the end of the keyword
 					@annotations << [keyword.name_loc.end_offset - 1, value.closing_loc.end_offset - keyword.name_loc.end_offset + 1, ""]
-					next "#{keyword.name}: #{type}"
+					parameters_assertions << [keyword.name, type]
+					next
 				# With default
 				in {
 					value: Prism::CallNode[
@@ -248,10 +252,14 @@ class Empirical::Processor < Empirical::BaseProcessor
 
 				value_location = keyword.value.location
 				@annotations << [value_location.start_offset, value_location.end_offset - value_location.start_offset, default]
-				"#{keyword.name}: #{type}"
-			end.join(", ")
+				parameters_assertions << [keyword.name, type]
+			end
 		end
 
-		parameters_assertions.join(", ")
+		parameters_assertions.map do |value, type|
+			<<~CODE
+				(raise ::Empirical::TypeError.argument_type_error(name: "#{value}", value: #{value}, expected: #{type}, method_name: "#{node.name}", context: self) unless #{type} === #{value})
+			CODE
+		end.join(";")
 	end
 end
