@@ -3,11 +3,13 @@
 class Empirical::Processor < Empirical::BaseProcessor
 	#: (Prism::ClassNode) -> void
 	def visit_class_node(node)
+		@annotations << [node.end_keyword_loc.start_offset, 0, ";class_defined();"]
 		new_context { super }
 	end
 
 	#: (Prism::ModuleNode) -> void
 	def visit_module_node(node)
+		@annotations << [node.end_keyword_loc.start_offset, 0, ";module_defined();"]
 		new_context { super }
 	end
 
