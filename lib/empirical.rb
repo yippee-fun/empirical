@@ -126,13 +126,3 @@ module Empirical
 		block
 	end
 end
-
-class Module
-	def module_defined
-	end
-end
-
-class Class
-	def class_defined
-	end
-end
