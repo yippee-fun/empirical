@@ -1,6 +1,11 @@
 # frozen_string_literal: true
 
 class Empirical::SignatureProcessor < Empirical::BaseProcessor
+	def initialize(...)
+		@return_type = nil
+		super
+	end
+
 	def visit_def_node(node)
 		return super unless node.equal_loc
 		return super unless node in {
@@ -36,6 +41,7 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 		else
 			call.name
 		end
+
 		@annotations << [
 			block.closing_loc.start_offset,
 			0,
@@ -46,7 +52,30 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 			start = block.closing_loc.start_offset,
 			block.closing_loc.end_offset - start,
 			"end",
+		]
+
+		previous_return_type = @return_type
+		@return_type = return_type
+		super
+		@return_type = previous_return_type
+	end
+
+	# TODO: test this
+	def visit_return_node(node)
+		@annotations.push(
+			[
+				node.keyword_loc.start_offset,
+				node.keyword_loc.end_offset - node.keyword_loc.start_offset,
+				"(__literally_returning__ = (",
+			],
+			[
+				node.location.end_offset,
+				0,
+				");(raise ::Empirical::TypeError.return_type_error(value: __literally_returning__, expected: #{@return_type}, method_name: __method__, context: self) unless #{@return_type} === __literally_returning__);return(__literally_returning__))",
 			]
+		)
+
+		super
 	end
 
 	private def build_type_checks(node)
