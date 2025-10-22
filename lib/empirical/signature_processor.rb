@@ -39,9 +39,7 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 		@annotations << [
 			block.closing_loc.start_offset,
 			0,
-			<<~CODE,
-    ;);(raise ::Empirical::TypeError.return_type_error(value: __literally_returns__, expected: #{return_type}, method_name: "#{node.name}", context: self) unless #{return_type} === __literally_returns__);__literally_returns__;
-				CODE
+			";);(raise ::Empirical::TypeError.return_type_error(value: __literally_returns__, expected: #{return_type}, method_name: '#{node.name}', context: self) unless #{return_type} === __literally_returns__);__literally_returns__;",
 			]
 
 		@annotations << [
@@ -165,9 +163,7 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 		end
 
 		parameters_assertions.map do |value, type|
-			<<~CODE
-				(raise ::Empirical::TypeError.argument_type_error(name: "#{value}", value: #{value}, expected: #{type}, method_name: "#{node.name}", context: self) unless #{type} === #{value})
-			CODE
+			"(raise ::Empirical::TypeError.argument_type_error(name: '#{value}', value: #{value}, expected: #{type}, method_name: '#{node.name}', context: self) unless #{type} === #{value})"
 		end.join(";")
 	end
 end
