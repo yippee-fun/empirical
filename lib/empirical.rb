@@ -2,7 +2,6 @@
 
 require "prism"
 require "securerandom"
-
 require "literal"
 require "empirical/version"
 require "empirical/name_error"
@@ -171,6 +170,7 @@ class Class
 	def class_defined
 	end
 end
+
 class Object
 	include Literal::Types
 end
