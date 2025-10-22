@@ -20,6 +20,12 @@ module Empirical
 	METHOD_METHOD = Module.instance_method(:method)
 
 	CONFIG = Configuration.new
+	PROCESSORS = [
+		IvarProcessor,
+		SignatureProcessor,
+		ClassCallbacksProcessor,
+	]
+
 	TypedSignatureError = Class.new(SyntaxError)
 
 	class TypeError < ::TypeError
@@ -79,12 +85,6 @@ module Empirical
 			end
 		end
 	end
-
-	PROCESSORS = [
-		IvarProcessor,
-		SignatureProcessor,
-		ClassCallbacksProcessor,
-	]
 
 	def self.process(source, with: [])
 		annotations = []
