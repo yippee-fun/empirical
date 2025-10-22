@@ -3,7 +3,7 @@
 class Empirical::SignatureProcessor < Empirical::BaseProcessor
 	def initialize(...)
 		@return_type = nil
-		@block = nil
+		@block_stack = []
 		super
 	end
 
@@ -13,9 +13,10 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 		# handle "method macros" (like `private`, `protected`, etc.)
 		# because the body block is attached to that call node,
 		# not the `fun` call node
-		in { arguments: Prism::ArgumentsNode[arguments: [Prism::CallNode[name: :fun]]] }
-			@block = node.block
+		in { block: Prism::BlockNode }
+			@block_stack << node.block
 			super
+			@block_stack.pop
 		else
 			super
 		end
@@ -40,7 +41,7 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 				]
 			]
 		}
-			body_block = node.block || @block
+			body_block = node.block || @block_stack.first
 			preamble = []
 			postamble = []
 
