@@ -1,89 +1,6 @@
 # frozen_string_literal: true
 
-class Empirical::Processor < Empirical::BaseProcessor
-	def visit_class_node(node)
-		@annotations << [node.end_keyword_loc.start_offset, 0, ";class_defined();"]
-		new_context { super }
-	end
-
-	def visit_module_node(node)
-		@annotations << [node.end_keyword_loc.start_offset, 0, ";module_defined();"]
-		new_context { super }
-	end
-
-	def visit_block_node(node)
-		new_context { super }
-	end
-
-	def visit_singleton_class_node(node)
-		new_context { super }
-	end
-
-	def visit_if_node(node)
-		visit(node.predicate)
-
-		branch { visit(node.statements) }
-		branch { visit(node.subsequent) }
-	end
-
-	def visit_case_node(node)
-		visit(node.predicate)
-
-		node.conditions.each do |condition|
-			branch { visit(condition) }
-		end
-
-		branch { visit(node.else_clause) }
-	end
-
-	def visit_defined_node(node)
-		value = node.value
-
-		return if Prism::InstanceVariableReadNode === value
-
-		super
-	end
-
-	def visit_instance_variable_read_node(node)
-		name = node.name
-
-		unless @context.include?(name)
-			location = node.location
-
-			@context << name
-
-			@annotations.push(
-				[location.start_character_offset, 0, "(defined?(#{name}) ? "],
-				[location.end_character_offset, 0, " : (::Kernel.raise(::Empirical::NameError.new(self, :#{name}))))"]
-			)
-		end
-
-		super
-	end
-
-	private def new_context
-		original_context = @context
-
-		@context = Set[]
-
-		begin
-			yield
-		ensure
-			@context = original_context
-		end
-	end
-
-	private def branch
-		original_context = @context
-		@context = original_context.dup
-
-		begin
-			yield
-		ensure
-			@context = original_context
-		end
-	end
-
+class Empirical::SignatureProcessor < Empirical::BaseProcessor
 	def visit_def_node(node)
 		return super unless node.equal_loc
 		return super unless node in {
@@ -132,8 +49,6 @@ class Empirical::Processor < Empirical::BaseProcessor
 			block.closing_loc.end_offset - start,
 			"end",
 			]
-
-		new_context { super }
 	end
 
 	private def build_type_checks(node)
@@ -169,7 +84,7 @@ class Empirical::Processor < Empirical::BaseProcessor
 
 					# Remove the type signature (the default value)
 					# we need to remove the `=` and the type default value
-					@annotations << [optional.operator_loc.start_offset, value.closing_loc.end_offset - optional.operator_loc.start_offset, ""]
+					@annotations << [optional.name_loc.end_offset, value.closing_loc.end_offset - optional.operator_loc.start_offset, ""]
 					parameters_assertions << [optional.name, type]
 					next
 				# With default

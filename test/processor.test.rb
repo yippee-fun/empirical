@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 test "basic" do
-	processed = Empirical::Processor.call(<<~RUBY)
+	processed = Empirical.process(<<~RUBY, with: Empirical::IvarProcessor)
 		def foo
 			@foo
 		end
@@ -15,7 +15,7 @@ test "basic" do
 end
 
 test "defined" do
-	processed = Empirical::Processor.call(<<~RUBY)
+	processed = Empirical.process(<<~RUBY, with: Empirical::IvarProcessor)
 		def foo
 			return @foo if defined?(@foo)
 			@foo = 2
@@ -31,7 +31,7 @@ test "defined" do
 end
 
 test "defined with a non-ivar" do
-	processed = Empirical::Processor.call(<<~RUBY)
+	processed = Empirical.process(<<~RUBY, with: Empirical::IvarProcessor)
 		def foo
 			return true if defined?(SomeConst)
 		end
@@ -45,7 +45,7 @@ test "defined with a non-ivar" do
 end
 
 test "conditional" do
-	processed = Empirical::Processor.call(<<~RUBY)
+	processed = Empirical.process(<<~RUBY, with: Empirical::IvarProcessor)
 		def foo
 			bar if @foo
 		end
@@ -59,7 +59,7 @@ test "conditional" do
 end
 
 test "multiple reads" do
-	processed = Empirical::Processor.call(<<~RUBY)
+	processed = Empirical.process(<<~RUBY, with: Empirical::IvarProcessor)
 		def foo
 			@foo
 			@foo
@@ -75,7 +75,7 @@ test "multiple reads" do
 end
 
 test "if conditional" do
-	processed = Empirical::Processor.call(<<~RUBY)
+	processed = Empirical.process(<<~RUBY, with: Empirical::IvarProcessor)
 		def foo
 			@a
 
@@ -117,7 +117,7 @@ test "if conditional" do
 end
 
 test "case" do
-	processed = Empirical::Processor.call(<<~RUBY)
+	processed = Empirical.process(<<~RUBY, with: Empirical::IvarProcessor)
 		@a
 
 		case @b
@@ -163,7 +163,7 @@ test "case" do
 end
 
 test "open method definition def" do
-	processed = Empirical::Processor.call(<<~RUBY)
+	processed = Empirical.process(<<~RUBY, with: Empirical::IvarProcessor)
 		def foo
 			@a
 			@a
@@ -177,7 +177,7 @@ test "open method definition def" do
 end
 
 test "class isolation" do
-	processed = Empirical::Processor.call(<<~RUBY)
+	processed = Empirical.process(<<~RUBY, with: Empirical::IvarProcessor)
 		@a
 		@a
 
@@ -199,7 +199,7 @@ test "class isolation" do
 end
 
 test "module isolation" do
-	processed = Empirical::Processor.call(<<~RUBY)
+	processed = Empirical.process(<<~RUBY, with: Empirical::IvarProcessor)
 		@a
 		@a
 
@@ -221,7 +221,7 @@ test "module isolation" do
 end
 
 test "block isolation" do
-	processed = Empirical::Processor.call(<<~RUBY)
+	processed = Empirical.process(<<~RUBY, with: Empirical::IvarProcessor)
 		@a
 		@a
 
@@ -243,7 +243,7 @@ test "block isolation" do
 end
 
 test "singleton class isolation" do
-	processed = Empirical::Processor.call(<<~RUBY)
+	processed = Empirical.process(<<~RUBY, with: Empirical::IvarProcessor)
 		@a
 		@a
 

@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 test "no return type, no args leaves as is" do
-	processed = Empirical::Processor.call(<<~RUBY)
+	processed = Empirical.process(<<~RUBY, with: Empirical::SignatureProcessor)
 		def foo
 			"a"
 		end
@@ -15,7 +15,7 @@ test "no return type, no args leaves as is" do
 end
 
 test "no return type, required keyword arg leaves as is" do
-	processed = Empirical::Processor.call(<<~RUBY)
+	processed = Empirical.process(<<~RUBY, with: Empirical::SignatureProcessor)
 		def foo(a:)
 			a
 		end
@@ -29,7 +29,7 @@ test "no return type, required keyword arg leaves as is" do
 end
 
 test "no return type, optional keyword arg leaves as is" do
-	processed = Empirical::Processor.call(<<~RUBY)
+	processed = Empirical.process(<<~RUBY, with: Empirical::SignatureProcessor)
 		def foo(a: nil)
 			a
 		end
@@ -43,7 +43,7 @@ test "no return type, optional keyword arg leaves as is" do
 end
 
 test "no return type, required positional arg leaves as is" do
-	processed = Empirical::Processor.call(<<~RUBY)
+	processed = Empirical.process(<<~RUBY, with: Empirical::SignatureProcessor)
 		def foo(a)
 			a
 		end
@@ -57,7 +57,7 @@ test "no return type, required positional arg leaves as is" do
 end
 
 test "no return type, optional positional arg leaves as is" do
-	processed = Empirical::Processor.call(<<~RUBY)
+	processed = Empirical.process(<<~RUBY, with: Empirical::SignatureProcessor)
 		def foo(a = nil)
 			a
 		end
@@ -71,7 +71,7 @@ test "no return type, optional positional arg leaves as is" do
 end
 
 test "no return type, mixed args leaves as is" do
-	processed = Empirical::Processor.call(<<~RUBY)
+	processed = Empirical.process(<<~RUBY, with: Empirical::SignatureProcessor)
 		def foo(a, b = nil, c:, d: nil)
 			a
 		end
@@ -85,7 +85,7 @@ test "no return type, mixed args leaves as is" do
 end
 
 test "return type, no args processes" do
-	processed = Empirical::Processor.call(<<~RUBY)
+	processed = Empirical.process(<<~RUBY, with: Empirical::SignatureProcessor)
 		def say_hello = String do
 			"Hello World!"
 		end
@@ -99,7 +99,7 @@ test "return type, no args processes" do
 end
 
 test "_Void return type, no args processes" do
-	processed = Empirical::Processor.call(<<~RUBY)
+	processed = Empirical.process(<<~RUBY, with: Empirical::SignatureProcessor)
 		def return_nothing = _Void do
 			background_work
 		end
@@ -113,7 +113,7 @@ test "_Void return type, no args processes" do
 end
 
 test "_Any? return type, no args processes" do
-	processed = Empirical::Processor.call(<<~RUBY)
+	processed = Empirical.process(<<~RUBY, with: Empirical::SignatureProcessor)
 		def foo = _Any? do
 			a
 		end
@@ -127,7 +127,7 @@ test "_Any? return type, no args processes" do
 end
 
 test "return type, positional arg processes" do
-	processed = Empirical::Processor.call(<<~'RUBY')
+	processed = Empirical.process(<<~'RUBY', with: Empirical::SignatureProcessor)
 		def say_hello(name = String) = String do
 			"Hello #{name}!"
 		end
@@ -141,7 +141,7 @@ test "return type, positional arg processes" do
 end
 
 test "return type, positional arg with default processes" do
-	processed = Empirical::Processor.call(<<~'RUBY')
+	processed = Empirical.process(<<~'RUBY', with: Empirical::SignatureProcessor)
 		def say_hello(name = String {"World"}) = String do
 			"Hello #{name}!"
 		end
@@ -155,7 +155,7 @@ test "return type, positional arg with default processes" do
 end
 
 test "return type, keyword arg processes" do
-	processed = Empirical::Processor.call(<<~'RUBY')
+	processed = Empirical.process(<<~'RUBY', with: Empirical::SignatureProcessor)
 		def say_hello(name: String) = String do
 			"Hello #{name}!"
 		end
@@ -169,7 +169,7 @@ test "return type, keyword arg processes" do
 end
 
 test "positional and keyword" do
-	processed = Empirical::Processor.call(<<~'RUBY')
+	processed = Empirical.process(<<~'RUBY', with: Empirical::SignatureProcessor)
 		def say_hello(greeting = String, name: String) = String do
 		  "#{greeting} #{name}!"
 		end
@@ -183,7 +183,7 @@ test "positional and keyword" do
 end
 
 test "return type, keyword arg with default processes" do
-	processed = Empirical::Processor.call(<<~'RUBY')
+	processed = Empirical.process(<<~'RUBY', with: Empirical::SignatureProcessor)
 		def say_hello(name: String {"World"}) = String do
 			"Hello #{name}!"
 		end
@@ -198,7 +198,7 @@ end
 
 test "return type, keyword arg with default processes" do
 	assert_raises(Empirical::TypedSignatureError) do
-		Empirical::Processor.call(<<~'RUBY')
+		Empirical.process(<<~'RUBY', with: Empirical::SignatureProcessor)
    def say_hello(foo, name: String {"World"}) = String do
    	"Hello #{name}!"
    end
@@ -207,7 +207,7 @@ test "return type, keyword arg with default processes" do
 end
 
 test "basic" do
-	processed = Empirical::Processor.call(<<~RUBY)
+	processed = Empirical.process(<<~RUBY, with: Empirical::SignatureProcessor)
 		def foo(a: Integer, b: String) = Numeric do
 			a
 		end
@@ -222,7 +222,7 @@ end
 
 # test "no parens" do
 # 	# this doesn't work, as Prism sees this as: `def foo(a: (Integer), b: (String = Numeric))`
-# 	processed = Empirical::Processor.call(<<~'RUBY')
+# 	processed = Empirical.process(<<~'RUBY', with: Empirical::SignatureProcessor)
 # 		def foo a: Integer, b: String = Numeric do
 # 			a
 # 		end
@@ -236,7 +236,7 @@ end
 # end
 
 test "with generic return type" do
-	processed = Empirical::Processor.call(<<~RUBY)
+	processed = Empirical.process(<<~RUBY, with: Empirical::SignatureProcessor)
 		def foo(a: Integer, b: String) = _String(length: 10) do
 			a
 		end
@@ -250,7 +250,7 @@ test "with generic return type" do
 end
 
 test "with generic input types" do
-	processed = Empirical::Processor.call(<<~RUBY)
+	processed = Empirical.process(<<~RUBY, with: Empirical::SignatureProcessor)
 		def foo(a: _Integer(1..), b: String(length: 10)) = String do
 			a
 		end
@@ -264,7 +264,7 @@ test "with generic input types" do
 end
 
 test "brace block" do
-	processed = Empirical::Processor.call(<<~RUBY)
+	processed = Empirical.process(<<~RUBY, with: Empirical::SignatureProcessor)
 		def foo(a: Integer, b: String) = Numeric {
 			a
 		}
@@ -278,7 +278,7 @@ test "brace block" do
 end
 
 # test "_Void return type, no args processes" do
-# 	processed = Empirical::Processor.call(<<~'RUBY')
+# 	processed = Empirical.process(<<~'RUBY', with: Empirical::SignatureProcessor)
 # 		def return_nothing(foo: String, **bar) = Integer do
 # 		end
 # 	RUBY
@@ -289,7 +289,7 @@ end
 # end
 
 test "return type, keyword arg with default processes" do
-	processed = Empirical::Processor.call(<<~'RUBY')
+	processed = Empirical.process(<<~'RUBY', with: Empirical::SignatureProcessor)
 		def say_hello(names = [String]) = String do
 			"Hello #{names.join(", ")}!"
 		end
@@ -303,7 +303,7 @@ test "return type, keyword arg with default processes" do
 end
 
 test "return type, keyword arg with default processes" do
-	processed = Empirical::Processor.call(<<~'RUBY')
+	processed = Empirical.process(<<~'RUBY', with: Empirical::SignatureProcessor)
 		def say_hello(names = [_Deferred { foo }]) = String do
 			"Hello #{names.join(", ")}!"
 		end
@@ -317,7 +317,7 @@ test "return type, keyword arg with default processes" do
 end
 
 test "return type, keyword arg with default processes" do
-	processed = Empirical::Processor.call(<<~'RUBY')
+	processed = Empirical.process(<<~'RUBY', with: Empirical::SignatureProcessor)
 		def say_hello(names = ([String])) = String do
 			"Hello #{names.join(", ")}!"
 		end
@@ -331,7 +331,7 @@ test "return type, keyword arg with default processes" do
 end
 
 test "return type, keyword arg with default processes" do
-	processed = Empirical::Processor.call(<<~'RUBY')
+	processed = Empirical.process(<<~'RUBY', with: Empirical::SignatureProcessor)
 		def say_hello(names: {_Deferred { foo } => String}) = String do
 			"Hello #{names.join(", ")}!"
 		end
@@ -345,7 +345,7 @@ test "return type, keyword arg with default processes" do
 end
 
 test "return type, keyword arg with default processes" do
-	processed = Empirical::Processor.call(<<~'RUBY')
+	processed = Empirical.process(<<~'RUBY', with: Empirical::SignatureProcessor)
 		def say_hello(names: ({_Deferred { foo } => String})) = String do
 			"Hello #{names.join(", ")}!"
 		end
@@ -359,7 +359,7 @@ test "return type, keyword arg with default processes" do
 end
 
 test "arg splat with named type" do
-	processed = Empirical::Processor.call(<<~RUBY)
+	processed = Empirical.process(<<~RUBY, with: Empirical::SignatureProcessor)
 		def move_to(position = [*Position]) = _Void do
 			do_something
 		end
@@ -373,7 +373,7 @@ test "arg splat with named type" do
 end
 
 test "kwarg splat with named type" do
-	processed = Empirical::Processor.call(<<~RUBY)
+	processed = Empirical.process(<<~RUBY, with: Empirical::SignatureProcessor)
 		def move_to(position: {**Position}) = _Void do
 			do_something
 		end

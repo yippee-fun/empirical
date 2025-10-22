@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 test "instance_eval with a receiver and forwarding" do
-	processed = Empirical::BaseProcessor.call(<<~RUBY)
+	processed = Empirical.process(<<~RUBY, with: Empirical::BaseProcessor)
 		def foo
 			bar.instance_eval(...)
 		end
@@ -17,7 +17,7 @@ test "instance_eval with a receiver and forwarding" do
 end
 
 test "instance_eval with a receiver and literals" do
-	processed = Empirical::BaseProcessor.call(<<~RUBY)
+	processed = Empirical.process(<<~RUBY, with: Empirical::BaseProcessor)
 		def foo
 			bar.instance_eval("a", "b")
 		end
@@ -33,7 +33,7 @@ test "instance_eval with a receiver and literals" do
 end
 
 test "instance_eval with a receiver and variables" do
-	processed = Empirical::BaseProcessor.call(<<~RUBY)
+	processed = Empirical.process(<<~RUBY, with: Empirical::BaseProcessor)
 		def foo
 			bar.instance_eval(a, b)
 		end
@@ -49,7 +49,7 @@ test "instance_eval with a receiver and variables" do
 end
 
 test "class_eval with variables" do
-	processed = Empirical::BaseProcessor.call(<<~RUBY)
+	processed = Empirical.process(<<~RUBY, with: Empirical::BaseProcessor)
 		class_eval(a, b)
 	RUBY
 
@@ -59,7 +59,7 @@ test "class_eval with variables" do
 end
 
 test "class_eval with literals" do
-	processed = Empirical::BaseProcessor.call(<<~RUBY)
+	processed = Empirical.process(<<~RUBY, with: Empirical::BaseProcessor)
 		class_eval("a", "b")
 	RUBY
 
@@ -69,7 +69,7 @@ test "class_eval with literals" do
 end
 
 test "class_eval with *args" do
-	processed = Empirical::BaseProcessor.call(<<~RUBY)
+	processed = Empirical.process(<<~RUBY, with: Empirical::BaseProcessor)
 		class_eval(*args)
 	RUBY
 
@@ -79,7 +79,7 @@ test "class_eval with *args" do
 end
 
 test "class_eval with *" do
-	processed = Empirical::BaseProcessor.call(<<~RUBY)
+	processed = Empirical.process(<<~RUBY, with: Empirical::BaseProcessor)
 		class_eval(*)
 	RUBY
 
@@ -89,7 +89,7 @@ test "class_eval with *" do
 end
 
 test "class_eval with &block" do
-	processed = Empirical::BaseProcessor.call(<<~RUBY)
+	processed = Empirical.process(<<~RUBY, with: Empirical::BaseProcessor)
 		class_eval(&block)
 	RUBY
 
@@ -99,7 +99,7 @@ test "class_eval with &block" do
 end
 
 test "class_eval with &" do
-	processed = Empirical::BaseProcessor.call(<<~RUBY)
+	processed = Empirical.process(<<~RUBY, with: Empirical::BaseProcessor)
 		class_eval(&)
 	RUBY
 

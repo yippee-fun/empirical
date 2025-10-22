@@ -6,7 +6,10 @@ require "securerandom"
 require "empirical/version"
 require "empirical/name_error"
 require "empirical/base_processor"
-require "empirical/processor"
+require "empirical/ivar_processor"
+require "empirical/eval_processor"
+require "empirical/class_callbacks_processor"
+require "empirical/signature_processor"
 require "empirical/configuration"
 
 require "require-hooks/setup"
@@ -70,11 +73,37 @@ module Empirical
 			source ||= File.read(path)
 
 			if CONFIG.match?(path)
-				Processor.call(source)
+				process(source, with: PROCESSORS)
 			else
-				BaseProcessor.call(source)
+				process(source)
 			end
 		end
+	end
+
+	PROCESSORS = [
+		IvarProcessor,
+		SignatureProcessor,
+		ClassCallbacksProcessor,
+	]
+
+	def self.process(source, with: [])
+		annotations = []
+		tree = Prism.parse(source).value
+
+		Array(with).each do |processor|
+			processor.new(annotations:).visit(tree)
+		end
+
+		Empirical::EvalProcessor.new(annotations:).visit(tree)
+
+		buffer = source.dup
+		annotations.sort_by!(&:first)
+
+		annotations.reverse_each do |offset, length, string|
+			buffer[offset, length] = string
+		end
+
+		buffer
 	end
 
 	# For internal use only. This method pre-processes arguments to an eval method.
@@ -96,7 +125,7 @@ module Empirical
 			end
 		when :eval
 			if Kernel == owner
-				source, binding, file = args
+				source, _binding, file = args
 			elsif Binding == owner
 				source, file = args
 			end
@@ -106,9 +135,9 @@ module Empirical
 			file ||= caller_locations(1, 1).first.path
 
 			if CONFIG.match?(file)
-				args[0] = Processor.call(source)
+				args[0] = process(source, with: PROCESSORS)
 			else
-				args[0] = BaseProcessor.call(source)
+				args[0] = process(source)
 			end
 		end
 
