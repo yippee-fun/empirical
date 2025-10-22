@@ -84,7 +84,7 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 
 					# Remove the type signature (the default value)
 					# we need to remove the `=` and the type default value
-					@annotations << [optional.name_loc.end_offset, value.closing_loc.end_offset - optional.operator_loc.start_offset, ""]
+					@annotations << [optional.name_loc.end_offset, value.closing_loc.end_offset - optional.name_loc.end_offset, ""]
 					parameters_assertions << [optional.name, type]
 					next
 				# With default
