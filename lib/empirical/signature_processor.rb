@@ -42,11 +42,26 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 			call.name
 		end
 
-		@annotations << [
-			block.closing_loc.start_offset,
-			0,
-			";);(raise ::Empirical::TypeError.return_type_error(value: __literally_returns__, expected: #{return_type}, method_name: '#{node.name}', context: self) unless #{return_type} === __literally_returns__);__literally_returns__;",
+		case return_type
+		when :void
+			@annotations << [
+				block.closing_loc.start_offset,
+				0,
+				";);::Empirical::Void;",
 			]
+		when :never
+			@annotations << [
+				block.closing_loc.start_offset,
+				0,
+				";);raise(::Empirical::NeverError.new);",
+			]
+		else
+			@annotations << [
+				block.closing_loc.start_offset,
+				0,
+				";);(raise ::Empirical::TypeError.return_type_error(value: __literally_returns__, expected: #{return_type}, method_name: '#{node.name}', context: self) unless #{return_type} === __literally_returns__);__literally_returns__;",
+			]
+		end
 
 		@annotations << [
 			start = block.closing_loc.start_offset,

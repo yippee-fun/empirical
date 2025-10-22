@@ -15,12 +15,15 @@ require "empirical/configuration"
 require "require-hooks/setup"
 
 module Empirical
+	Void = Object.new
+
 	EMPTY_ARRAY = [].freeze
 	EVERYTHING = ["**/*"].freeze
 	METHOD_METHOD = Module.instance_method(:method)
 
 	CONFIG = Configuration.new
 	TypedSignatureError = Class.new(SyntaxError)
+	NeverError = Class.new(RuntimeError)
 
 	class TypeError < ::TypeError
 		def self.argument_type_error(name:, value:, expected:, method_name:, context:)
