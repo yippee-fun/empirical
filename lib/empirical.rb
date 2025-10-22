@@ -2,7 +2,7 @@
 
 require "prism"
 require "securerandom"
-
+require "literal"
 require "empirical/version"
 require "empirical/name_error"
 require "empirical/type_error"
@@ -16,6 +16,14 @@ require "empirical/configuration"
 require "require-hooks/setup"
 
 module Empirical
+	class VoidClass < BasicObject
+		def method_missing(method_name, ...)
+			::Kernel.raise "The method `#{method_name}` was called on void. Methods that explicitly declare a void return type should not have their return values used for anything."
+		end
+	end
+
+	Void = VoidClass.new
+
 	EMPTY_ARRAY = [].freeze
 	EVERYTHING = ["**/*"].freeze
 	METHOD_METHOD = Module.instance_method(:method)
@@ -28,6 +36,7 @@ module Empirical
 	]
 
 	TypedSignatureError = Class.new(SyntaxError)
+	NeverError = Class.new(RuntimeError)
 
 	# Initializes Empirical so that code loaded after this point will:
 	#   1. be guarded against undefined instance variable reads,
@@ -80,4 +89,8 @@ module Empirical
 
 		buffer
 	end
+end
+
+class Object
+	include Literal::Types
 end

@@ -6,193 +6,203 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 		super
 	end
 
-	def visit_def_node(node)
-		return super unless node.equal_loc
-		return super unless node in {
-				body: {
-					body: [
-						Prism::CallNode[
-							block: Prism::BlockNode[
-								body: Prism::StatementsNode
-							] => block
-						] => call
+	def visit_call_node(node)
+		return super unless :fun == node.name
+
+		raise SyntaxError unless node.arguments
+		raise SyntaxError unless nil == node.receiver
+
+		case node
+		in {
+			arguments: Prism::ArgumentsNode[
+				arguments: [
+					Prism::KeywordHashNode[
+						elements: [
+							Prism::AssocNode[
+								key: signature,
+								value: return_type
+							]
+						]
 					]
-				}
-			}
-
-		type_checks = build_type_checks(node)
-
-		if node.rparen_loc
-			@annotations << [
-				start = node.rparen_loc.start_offset + 1,
-				block.opening_loc.end_offset - start,
-				";#{type_checks};__literally_returns__ = (;",
 				]
-		else
+			],
+			block: Prism::BlockNode => body_block
+		}
+			preamble = []
+			postamble = []
+
+			case signature
+			in Prism::LocalVariableReadNode | Prism::ConstantReadNode
+				# no-op
+				# method_name = signature.name
+			in Prism::CallNode
+				# method_name = signature.name
+				raise SyntaxError if signature.block
+
+				signature.arguments&.arguments&.each do |argument|
+					case argument
+					# Positional splat e.g. `a = [Integer]` becomes `*a`
+					in Prism::LocalVariableWriteNode[name: name, value: Prism::ArrayNode[elements: [type]]]
+						@annotations << [
+							argument.name_loc.start_offset,
+							0,
+							"*",
+						]
+
+						@annotations << [
+							argument.name_loc.end_offset,
+							type.location.end_offset - argument.name_loc.end_offset + 1,
+							"",
+						]
+
+						preamble << "raise(::Empirical::TypeError.argument_type_error(name: '#{name}', value: #{name}, expected: ::Literal::_Array(#{type.slice}), method_name: __method__, context: self)) unless ::Literal::_Array(#{type.slice}) === #{name}"
+
+					# Positional (a)
+					in Prism::LocalVariableWriteNode[name: name, value: type]
+						case type
+
+						# Positional with default (a = 1)
+						in Prism::CallNode[name: :|, receiver: t, arguments: Prism::ArgumentsNode[arguments: [default]]]
+							type_string = t.slice
+							default_string = default.slice
+						else
+							type_string = type.slice
+							default_string = "nil"
+						end
+
+						@annotations << [
+							type.location.start_offset,
+							type.location.end_offset - type.location.start_offset,
+							default_string,
+						]
+
+						preamble << "raise(::Empirical::TypeError.argument_type_error(name: '#{name}', value: #{name}, expected: #{type_string}, method_name: __method__, context: self)) unless #{type_string} === #{name}"
+					in Prism::KeywordHashNode
+						argument.elements.each do |argument|
+							name = argument.key.unescaped
+							type = argument.value
+
+							case type
+							# Keyword splat (**foo)
+							in Prism::HashNode[elements: [Prism::AssocNode[key: key_type, value: value_type]]]
+								@annotations << [
+									argument.key.location.start_offset,
+									0,
+									"**",
+								]
+
+								@annotations << [
+									argument.key.location.end_offset - 1,
+									type.location.end_offset - argument.key.location.end_offset + 1,
+									"",
+								]
+
+								preamble << "raise(::Empirical::TypeError.argument_type_error(name: '#{name}', value: #{name}, expected: ::Literal::_Hash(#{key_type.slice}, #{value_type.slice}), method_name: __method__, context: self)) unless ::Literal::_Hash(#{key_type.slice}, #{value_type.slice}) === #{name}"
+							else
+								case type
+								# Keyword with default
+								in Prism::CallNode[name: :|, receiver: t, arguments: Prism::ArgumentsNode[arguments: [default]]]
+									type_string = t.slice
+									default_string = default.slice
+								else
+									type_string = type.slice
+									default_string = "nil"
+								end
+
+								@annotations << [
+									type.location.start_offset,
+									type.location.end_offset - type.location.start_offset,
+									default_string,
+									]
+
+								preamble << "raise(::Empirical::TypeError.argument_type_error(name: '#{name}', value: #{name}, expected: #{type_string}, method_name: __method__, context: self)) unless #{type_string} === #{name}"
+							end
+						end
+					else
+						raise SyntaxError
+					end
+				end
+			else
+				raise SyntaxError
+			end
+
+			preamble << "__literally_returns__ = ("
+			postamble << ")"
+
+			case return_type
+			in Prism::LocalVariableReadNode[name: :void] | Prism::CallNode[name: :void, receiver: nil, block: nil, arguments: nil]
+				postamble << "::Empirical::Void"
+			in Prism::LocalVariableReadNode[name: :never] | Prism::CallNode[name: :never, receiver: nil, block: nil, arguments: nil]
+				postamble << "raise(::Empirical::NeverError.new)"
+			else
+				postamble << "raise(::Empirical::TypeError.return_type_error(value: __literally_returns__, expected: #{return_type.slice}, method_name: __method__, context: self)) unless #{return_type.slice} === __literally_returns__"
+				postamble << "__literally_returns__"
+			end
+
+			# Replace `fun` with `def`
 			@annotations << [
-				start = node.equal_loc.start_offset - 1,
-				block.opening_loc.end_offset - start,
-				";__literally_returns__ = (;",
-				]
-		end
-
-		return_type = if call.closing_loc
-			node.slice[(call.start_offset)...(call.closing_loc.end_offset)]
-		else
-			call.name
-		end
-
-		@annotations << [
-			block.closing_loc.start_offset,
-			0,
-			";);(raise ::Empirical::TypeError.return_type_error(value: __literally_returns__, expected: #{return_type}, method_name: '#{node.name}', context: self) unless #{return_type} === __literally_returns__);__literally_returns__;",
+				node.message_loc.start_offset,
+				node.message_loc.end_offset - node.message_loc.start_offset,
+				"def",
 			]
 
-		@annotations << [
-			start = block.closing_loc.start_offset,
-			block.closing_loc.end_offset - start,
-			"end",
-		]
+			# Remove the return type and `do` and replace with preamble
+			@annotations << [
+				signature.location.end_offset,
+				body_block.opening_loc.end_offset - signature.location.end_offset,
+				";#{preamble.join(';')};",
+			]
 
-		previous_return_type = @return_type
+			# Insert postamble
+			@annotations << [
+				body_block.closing_loc.start_offset,
+				0,
+				";#{postamble.join(';')};",
+			]
+		end
+
+		# TODO: This won’t track properly if the guards are the top of the method aren’t satisfied
+		original_return_type = @return_type
 		@return_type = return_type
 		super
-		@return_type = previous_return_type
+		@return_type = original_return_type
 	end
 
-	# TODO: test this
 	def visit_return_node(node)
-		@annotations.push(
-			[
+		case @return_type
+		in nil
+			# no-op
+		in Prism::LocalVariableReadNode[name: :void] | Prism::CallNode[name: :void, receiver: nil, block: nil, arguments: nil]
+			if node.arguments
+				raise "You’re returning something"
+			else
+				@annotations << [
+					node.keyword_loc.end_offset,
+					0,
+					"(::Empirical::Void)",
+				]
+			end
+		in Prism::LocalVariableReadNode[name: :never] | Prism::CallNode[name: :never, receiver: nil, block: nil, arguments: nil]
+			@annotations << [
 				node.keyword_loc.start_offset,
 				node.keyword_loc.end_offset - node.keyword_loc.start_offset,
-				"(__literally_returning__ = (",
-			],
-			[
-				node.location.end_offset,
-				0,
-				");(raise ::Empirical::TypeError.return_type_error(value: __literally_returning__, expected: #{@return_type}, method_name: __method__, context: self) unless #{@return_type} === __literally_returning__);return(__literally_returning__))",
+				"(raise(::Empirical::NeverError.new))",
 			]
-		)
+		else
+			@annotations.push(
+				[
+					node.keyword_loc.start_offset,
+					node.keyword_loc.end_offset - node.keyword_loc.start_offset,
+					"(__literally_returning__ = (",
+				],
+				[
+					node.location.end_offset,
+					0,
+					");(raise ::Empirical::TypeError.return_type_error(value: __literally_returning__, expected: #{@return_type}, method_name: __method__, context: self) unless #{@return_type} === __literally_returning__);return(__literally_returning__))",
+				]
+			)
+		end
 
 		super
-	end
-
-	private def build_type_checks(node)
-		return unless node.parameters
-
-		if (requireds = node.parameters.requireds)&.any?
-			raise Empirical::TypedSignatureError.new("Typed method signatures don't allow required keyword parameters: #{requireds.inspect}")
-		elsif (rest = node.parameters.rest)&.any?
-			raise Empirical::TypedSignatureError.new("Typed method signatures don't allow a splat array parameter: #{rest.inspect}")
-		elsif (posts = node.parameters.posts)&.any?
-			raise Empirical::TypedSignatureError.new("Typed method signatures don't allow a splat hash parameter: #{posts.inspect}")
-		elsif (keyword_rest = node.parameters.keyword_rest)&.any?
-			raise Empirical::TypedSignatureError.new("Typed method signatures don't allow a splat hash parameter: #{keyword_rest.inspect}")
-		end
-
-		parameters_assertions = []
-
-		if (optionals = node.parameters.optionals)&.any?
-			optionals.each do |optional|
-				case optional
-				# typed splats, e.g.
-				# `(names = [String])` => `(*names); assert(names: _Array(String))` and
-				# `(position = [*Position])` => `(*position); assert(position: Position)`
-				in { value: Prism::ArrayNode[elements: [type_node]] => value }
-					if type_node in Prism::SplatNode
-						type = type_node.expression.slice
-					else
-						type = "::Literal::_Array(#{type_node.slice})"
-					end
-
-					# Make the parameter a splat
-					@annotations << [optional.name_loc.start_offset, 0, "*"]
-
-					# Remove the type signature (the default value)
-					# we need to remove the `=` and the type default value
-					@annotations << [optional.name_loc.end_offset, value.closing_loc.end_offset - optional.name_loc.end_offset, ""]
-					parameters_assertions << [optional.name, type]
-					next
-				# With default
-				in {
-					value: Prism::CallNode[
-						block: Prism::BlockNode[
-							body: Prism::StatementsNode => default_node
-						]
-					] => call
-				}
-					default = "(#{default_node.slice})"
-
-					type = if call.closing_loc
-						node.slice[(call.start_offset)...(call.closing_loc.end_offset)]
-					else
-						call.name
-					end
-				# No default
-				else
-					default = "nil"
-					type = optional.value.slice
-				end
-
-				value_location = optional.value.location
-				@annotations << [value_location.start_offset, value_location.end_offset - value_location.start_offset, default]
-				parameters_assertions << [optional.name, type]
-			end
-		end
-
-		if (keywords = node.parameters.keywords)&.any?
-			keywords.each do |keyword|
-				case keyword
-				# Splat
-				in { value: Prism::HashNode[elements: [Prism::AssocNode[key: key_type_node, value: val_type_node]]] => value }
-					type = "::Literal::_Hash(#{key_type_node.slice}, #{val_type_node.slice})"
-
-					# Make the parameter a splat
-					@annotations << [keyword.name_loc.start_offset, 0, "**"]
-
-					# Remove the type signature (the default value) and the colon at the end of the keyword
-					@annotations << [keyword.name_loc.end_offset - 1, value.closing_loc.end_offset - keyword.name_loc.end_offset + 1, ""]
-					next "#{keyword.name}: #{type}"
-				in { value: Prism::HashNode[elements: [Prism::AssocSplatNode[value: val_type_node]]] => value }
-					type = val_type_node.slice
-
-					# Make the parameter a splat
-					@annotations << [keyword.name_loc.start_offset, 0, "**"]
-
-					# Remove the type signature (the default value) and the colon at the end of the keyword
-					@annotations << [keyword.name_loc.end_offset - 1, value.closing_loc.end_offset - keyword.name_loc.end_offset + 1, ""]
-					parameters_assertions << [keyword.name, type]
-					next
-				# With default
-				in {
-					value: Prism::CallNode[
-						block: Prism::BlockNode[
-							body: Prism::StatementsNode => default_node
-						]
-					] => call
-				}
-					default = "(#{default_node.slice})"
-
-					type = if call.closing_loc
-						node.slice[(call.start_offset)...(call.closing_loc.end_offset)]
-					else
-						call.name
-					end
-				# No default
-				else
-					default = "nil"
-					type = keyword.value.slice
-				end
-
-				value_location = keyword.value.location
-				@annotations << [value_location.start_offset, value_location.end_offset - value_location.start_offset, default]
-				parameters_assertions << [keyword.name, type]
-			end
-		end
-
-		parameters_assertions.map do |value, type|
-			"(raise ::Empirical::TypeError.argument_type_error(name: '#{value}', value: #{value}, expected: #{type}, method_name: '#{node.name}', context: self) unless #{type} === #{value})"
-		end.join(";")
 	end
 end
