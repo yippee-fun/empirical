@@ -3,12 +3,25 @@
 class Empirical::SignatureProcessor < Empirical::BaseProcessor
 	def initialize(...)
 		@return_type = nil
+		@block = nil
 		super
 	end
 
 	def visit_call_node(node)
-		return super unless :fun == node.name
+		case node
+		in { name: :fun } then visit_fun_call_node(node)
+		# handle "method macros" (like `private`, `protected`, etc.)
+		# because the body block is attached to that call node,
+		# not the `fun` call node
+		in { arguments: Prism::ArgumentsNode[arguments: [Prism::CallNode[name: :fun]]] }
+			@block = node.block
+			super
+		else
+			super
+		end
+	end
 
+	def visit_fun_call_node(node)
 		raise SyntaxError unless node.arguments
 		raise SyntaxError unless nil == node.receiver
 
@@ -25,9 +38,9 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 						]
 					]
 				]
-			],
-			block: Prism::BlockNode => body_block
+			]
 		}
+			body_block = node.block || @block
 			preamble = []
 			postamble = []
 
@@ -164,7 +177,7 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 		# TODO: This won’t track properly if the guards are the top of the method aren’t satisfied
 		original_return_type = @return_type
 		@return_type = return_type
-		super
+		# super
 		@return_type = original_return_type
 	end
 
