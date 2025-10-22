@@ -77,18 +77,38 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 
 	# TODO: test this
 	def visit_return_node(node)
-		@annotations.push(
-			[
+		case @return_type
+		when nil
+		when :void
+			if node.arguments
+				raise "You’re returning something"
+			else
+				@annotations << [
+					node.keyword_loc.end_offset,
+					0,
+					"(::Empirical::Void)",
+				]
+			end
+		when :never
+			@annotations << [
 				node.keyword_loc.start_offset,
 				node.keyword_loc.end_offset - node.keyword_loc.start_offset,
-				"(__literally_returning__ = (",
-			],
-			[
-				node.location.end_offset,
-				0,
-				");(raise ::Empirical::TypeError.return_type_error(value: __literally_returning__, expected: #{@return_type}, method_name: __method__, context: self) unless #{@return_type} === __literally_returning__);return(__literally_returning__))",
+				"(raise(::Empirical::NeverError.new))",
 			]
-		)
+		else
+			@annotations.push(
+				[
+					node.keyword_loc.start_offset,
+					node.keyword_loc.end_offset - node.keyword_loc.start_offset,
+					"(__literally_returning__ = (",
+				],
+				[
+					node.location.end_offset,
+					0,
+					");(raise ::Empirical::TypeError.return_type_error(value: __literally_returning__, expected: #{@return_type}, method_name: __method__, context: self) unless #{@return_type} === __literally_returning__);return(__literally_returning__))",
+				]
+			)
+		end
 
 		super
 	end
