@@ -95,9 +95,8 @@ class Empirical::Processor < Empirical::BaseProcessor
 	end
 
 	def visit_def_node(node)
-		new_context do
-			return super unless node.equal_loc
-			return super unless node in {
+		return super unless node.equal_loc
+		return super unless node in {
 				body: {
 					body: [
 						Prism::CallNode[
@@ -109,41 +108,42 @@ class Empirical::Processor < Empirical::BaseProcessor
 				}
 			}
 
-			type_checks = build_type_checks(node)
+		type_checks = build_type_checks(node)
 
-			if node.rparen_loc
-				@annotations << [
-					start = node.rparen_loc.start_offset + 1,
-					block.opening_loc.end_offset - start,
-					";#{type_checks};__literally_returns__ = (;",
-				]
-			else
-				@annotations << [
-					start = node.equal_loc.start_offset - 1,
-					block.opening_loc.end_offset - start,
-					";__literally_returns__ = (;",
-				]
-			end
-
-			return_type = if call.closing_loc
-				node.slice[(call.start_offset)...(call.closing_loc.end_offset)]
-			else
-				call.name
-			end
+		if node.rparen_loc
 			@annotations << [
-				block.closing_loc.start_offset,
-				0,
-				<<~CODE,
-					;);(raise ::Empirical::TypeError.return_type_error(value: __literally_returns__, expected: #{return_type}, method_name: "#{node.name}", context: self) unless #{return_type} === __literally_returns__);__literally_returns__;
+				start = node.rparen_loc.start_offset + 1,
+				block.opening_loc.end_offset - start,
+				";#{type_checks};__literally_returns__ = (;",
+				]
+		else
+			@annotations << [
+				start = node.equal_loc.start_offset - 1,
+				block.opening_loc.end_offset - start,
+				";__literally_returns__ = (;",
+				]
+		end
+
+		return_type = if call.closing_loc
+			node.slice[(call.start_offset)...(call.closing_loc.end_offset)]
+		else
+			call.name
+		end
+		@annotations << [
+			block.closing_loc.start_offset,
+			0,
+			<<~CODE,
+    ;);(raise ::Empirical::TypeError.return_type_error(value: __literally_returns__, expected: #{return_type}, method_name: "#{node.name}", context: self) unless #{return_type} === __literally_returns__);__literally_returns__;
 				CODE
 			]
 
-			@annotations << [
-				start = block.closing_loc.start_offset,
-				block.closing_loc.end_offset - start,
-				"end",
+		@annotations << [
+			start = block.closing_loc.start_offset,
+			block.closing_loc.end_offset - start,
+			"end",
 			]
-		end
+
+		new_context { super }
 	end
 
 	private def build_type_checks(node)
@@ -178,6 +178,7 @@ class Empirical::Processor < Empirical::BaseProcessor
 					@annotations << [optional.name_loc.start_offset, 0, "*"]
 
 					# Remove the type signature (the default value)
+					# we need to remove the `=` and the type default value
 					@annotations << [optional.operator_loc.start_offset, value.closing_loc.end_offset - optional.operator_loc.start_offset, ""]
 					parameters_assertions << [optional.name, type]
 					next
