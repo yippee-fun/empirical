@@ -16,7 +16,13 @@ require "empirical/configuration"
 require "require-hooks/setup"
 
 module Empirical
-	Void = Object.new
+	class VoidClass < BasicObject
+		def method_missing(method_name, ...)
+			::Kernel.raise "The method `#{method_name}` was called on void. Methods that explicitly declare a void return type should not have their return values used for anything."
+		end
+	end
+
+	Void = VoidClass.new
 
 	EMPTY_ARRAY = [].freeze
 	EVERYTHING = ["**/*"].freeze
