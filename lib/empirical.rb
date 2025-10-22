@@ -29,9 +29,12 @@ module Empirical
 
 	TypedSignatureError = Class.new(SyntaxError)
 
-	# Initializes Empirical so that code loaded after this point will be
-	# guarded against undefined instance variable reads. You can pass an array
-	# of globs to `include:` and `exclude:`.
+	# Initializes Empirical so that code loaded after this point will:
+	#   1. be guarded against undefined instance variable reads,
+	#   2. permit users to define type checked method definitions, and
+	#   3. permit users to define class/module defined callbacks
+	#
+	# You can pass an array of globs to `include:` and `exclude:`.
 	#
 	# ```ruby
 	# Empirical.init(
