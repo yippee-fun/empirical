@@ -1,29 +1,24 @@
 # frozen_string_literal: true
 
 class Empirical::Processor < Empirical::BaseProcessor
-	#: (Prism::ClassNode) -> void
 	def visit_class_node(node)
 		@annotations << [node.end_keyword_loc.start_offset, 0, ";class_defined();"]
 		new_context { super }
 	end
 
-	#: (Prism::ModuleNode) -> void
 	def visit_module_node(node)
 		@annotations << [node.end_keyword_loc.start_offset, 0, ";module_defined();"]
 		new_context { super }
 	end
 
-	#: (Prism::BlockNode) -> void
 	def visit_block_node(node)
 		new_context { super }
 	end
 
-	#: (Prism::SingletonClassNode) -> void
 	def visit_singleton_class_node(node)
 		new_context { super }
 	end
 
-	#: (Prism::IfNode) -> void
 	def visit_if_node(node)
 		visit(node.predicate)
 
@@ -31,7 +26,6 @@ class Empirical::Processor < Empirical::BaseProcessor
 		branch { visit(node.subsequent) }
 	end
 
-	#: (Prism::CaseNode) -> void
 	def visit_case_node(node)
 		visit(node.predicate)
 
@@ -42,7 +36,6 @@ class Empirical::Processor < Empirical::BaseProcessor
 		branch { visit(node.else_clause) }
 	end
 
-	#: (Prism::DefinedNode) -> void
 	def visit_defined_node(node)
 		value = node.value
 
@@ -51,7 +44,6 @@ class Empirical::Processor < Empirical::BaseProcessor
 		super
 	end
 
-	#: (Prism::InstanceVariableReadNode) -> void
 	def visit_instance_variable_read_node(node)
 		name = node.name
 
@@ -69,7 +61,6 @@ class Empirical::Processor < Empirical::BaseProcessor
 		super
 	end
 
-	#: () { () -> void } -> void
 	private def new_context
 		original_context = @context
 
@@ -82,7 +73,6 @@ class Empirical::Processor < Empirical::BaseProcessor
 		end
 	end
 
-	#: () { () -> void } -> void
 	private def branch
 		original_context = @context
 		@context = original_context.dup
