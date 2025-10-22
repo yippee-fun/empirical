@@ -9,7 +9,12 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 
 	def visit_call_node(node)
 		case node
-		in { name: :fun } then visit_fun_call_node(node)
+		in { name: :fun }
+			original_return_type = @return_type
+			@return_type = visit_fun_call_node(node)
+			super # ensures any early returns are processed (also, technically, any internal method defs)
+			@return_type = original_return_type
+
 		# handle "method macros" (like `private`, `protected`, etc.)
 		# because the body block is attached to that call node,
 		# not the `fun` call node
@@ -18,7 +23,9 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 			super
 			@block_stack.pop
 		else
-			super
+			original_return_type = @return_type
+			super # ensures any early returns are processed (also, technically, any internal method defs)
+			@return_type = original_return_type
 		end
 	end
 
@@ -175,11 +182,7 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 			]
 		end
 
-		# TODO: This won’t track properly if the guards are the top of the method aren’t satisfied
-		original_return_type = @return_type
-		@return_type = return_type
-		# super
-		@return_type = original_return_type
+		return_type
 	end
 
 	def visit_return_node(node)
