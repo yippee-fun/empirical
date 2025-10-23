@@ -30,6 +30,7 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 	end
 
 	def visit_fun_call_node(node)
+		# TODO: better error messages
 		raise SyntaxError unless node.arguments
 		raise SyntaxError unless nil == node.receiver
 
@@ -53,23 +54,25 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 			postamble = []
 
 			case signature
+			# parameterless method defs (e.g. `fun foo` or `fun foo()`)
 			in Prism::LocalVariableReadNode | Prism::ConstantReadNode
 				# no-op
-				# method_name = signature.name
+			# parameterful method defs (e.g. `fun foo(a: Type)` or `fun foo(a = Type)`)
 			in Prism::CallNode
-				# method_name = signature.name
 				raise SyntaxError if signature.block
 
 				signature.arguments&.arguments&.each do |argument|
 					case argument
-					# Positional splat e.g. `a = [Integer]` becomes `*a`
+					# Positional splat (e.g. `a = [Type]` becomes `*a`)
 					in Prism::LocalVariableWriteNode[name: name, value: Prism::ArrayNode[elements: [type]]]
+						# make argument a splat
 						@annotations << [
 							argument.name_loc.start_offset,
 							0,
 							"*",
 						]
 
+						# remove the type and equals operator from the argument
 						@annotations << [
 							argument.name_loc.end_offset,
 							type.location.end_offset - argument.name_loc.end_offset + 1,
@@ -78,72 +81,80 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 
 						preamble << "raise(::Empirical::TypeError.argument_type_error(name: '#{name}', value: #{name}, expected: ::Literal::_Array(#{type.slice}), method_name: __method__, context: self)) unless ::Literal::_Array(#{type.slice}) === #{name}"
 
-					# Positional (a)
-					in Prism::LocalVariableWriteNode[name: name, value: type]
-						case type
-
-						# Positional with default (a = 1)
-						in Prism::CallNode[name: :|, receiver: t, arguments: Prism::ArgumentsNode[arguments: [default]]]
-							type_string = t.slice
+					# Positional (e.g. `a = Type` becomes `a = nil` or `a = default`)
+					in Prism::LocalVariableWriteNode[name: name, value: typed_param]
+						case typed_param
+						# Positional with default (e.g. `a = Type | 1` becomes `a = 1`)
+						in Prism::CallNode[name: :|, receiver: type, arguments: Prism::ArgumentsNode[arguments: [default]]]
+							type_slice = type.slice
 							default_string = default.slice
+						# Positional without default (e.g. `a = Type` becomes `a = nil`)
 						else
-							type_string = type.slice
+							type_slice = typed_param.slice
 							default_string = "nil"
 						end
 
+						# replace the typed_param from the argument with the appropriate default value
 						@annotations << [
-							type.location.start_offset,
-							type.location.end_offset - type.location.start_offset,
+							(start = typed_param.location.start_offset),
+							typed_param.location.end_offset - start,
 							default_string,
 						]
 
-						preamble << "raise(::Empirical::TypeError.argument_type_error(name: '#{name}', value: #{name}, expected: #{type_string}, method_name: __method__, context: self)) unless #{type_string} === #{name}"
+						preamble << "raise(::Empirical::TypeError.argument_type_error(name: '#{name}', value: #{name}, expected: #{type_slice}, method_name: __method__, context: self)) unless #{type_slice} === #{name}"
+
+					# Keyword (e.g. `a: Type` becomes `a: nil` or `a: default`)
 					in Prism::KeywordHashNode
 						argument.elements.each do |argument|
 							name = argument.key.unescaped
-							type = argument.value
+							typed_param = argument.value
 
-							case type
-							# Keyword splat (**foo)
+							case typed_param
+							# Keyword splat (e.g. `a: {Type => Type}` becomes `**a`)
 							in Prism::HashNode[elements: [Prism::AssocNode[key: key_type, value: value_type]]]
+								# make argument a splat
 								@annotations << [
 									argument.key.location.start_offset,
 									0,
 									"**",
 								]
 
+								# remove the typed_param and equals operator from the argument
 								@annotations << [
 									argument.key.location.end_offset - 1,
-									type.location.end_offset - argument.key.location.end_offset + 1,
+									typed_param.location.end_offset - argument.key.location.end_offset + 1,
 									"",
 								]
 
 								preamble << "raise(::Empirical::TypeError.argument_type_error(name: '#{name}', value: #{name}, expected: ::Literal::_Hash(#{key_type.slice}, #{value_type.slice}), method_name: __method__, context: self)) unless ::Literal::_Hash(#{key_type.slice}, #{value_type.slice}) === #{name}"
 							else
-								case type
+								case typed_param
 								# Keyword with default
-								in Prism::CallNode[name: :|, receiver: t, arguments: Prism::ArgumentsNode[arguments: [default]]]
-									type_string = t.slice
+								in Prism::CallNode[name: :|, receiver: type, arguments: Prism::ArgumentsNode[arguments: [default]]]
+									type_slice = type.slice
 									default_string = default.slice
 								else
-									type_string = type.slice
+									type_slice = typed_param.slice
 									default_string = "nil"
 								end
 
+								# replace the typed_param from the argument with the appropriate default value
 								@annotations << [
-									type.location.start_offset,
-									type.location.end_offset - type.location.start_offset,
+									(start = typed_param.location.start_offset),
+									typed_param.location.end_offset - start,
 									default_string,
-									]
+								]
 
-								preamble << "raise(::Empirical::TypeError.argument_type_error(name: '#{name}', value: #{name}, expected: #{type_string}, method_name: __method__, context: self)) unless #{type_string} === #{name}"
+								preamble << "raise(::Empirical::TypeError.argument_type_error(name: '#{name}', value: #{name}, expected: #{type_slice}, method_name: __method__, context: self)) unless #{type_slice} === #{name}"
 							end
 						end
 					else
+						# TODO: better error message
 						raise SyntaxError
 					end
 				end
 			else
+				# TODO: better error message
 				raise SyntaxError
 			end
 
@@ -162,15 +173,15 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 
 			# Replace `fun` with `def`
 			@annotations << [
-				node.message_loc.start_offset,
-				node.message_loc.end_offset - node.message_loc.start_offset,
+				(start = node.message_loc.start_offset),
+				node.message_loc.end_offset - start,
 				"def",
 			]
 
 			# Remove the return type and `do` and replace with preamble
 			@annotations << [
-				signature.location.end_offset,
-				body_block.opening_loc.end_offset - signature.location.end_offset,
+				(start = signature.location.end_offset),
+				body_block.opening_loc.end_offset - start,
 				";#{preamble.join(';')};",
 			]
 
@@ -180,6 +191,9 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 				0,
 				";#{postamble.join(';')};",
 			]
+		else
+			# TODO: better error message
+			raise SyntaxError
 		end
 
 		return_type
