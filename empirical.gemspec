@@ -6,7 +6,7 @@ Gem::Specification.new do |spec|
 	spec.name = "empirical"
 	spec.version = Empirical::VERSION
 	spec.authors = ["Joel Drapper", "Stephen Margheim"]
-	spec.email = ["joel@drapper.me"]
+	spec.email = ["joel@drapper.me", "stephen.margheim@gmail.com"]
 
 	spec.summary = "Based on, concerned with, or verifiable by observation or experience rather than theory or pure logic."
 	spec.description = "Based on, concerned with, or verifiable by observation or experience rather than theory or pure logic."
