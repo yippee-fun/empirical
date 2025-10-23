@@ -1,0 +1,9 @@
+# yaml-language-server: $schema=https://www.rubyschema.org/rubocop.json
+
+%YAML 1.1
+---
+Style/RedundantSelf:
+  Enabled: false
+
+Empirical/NoDefs:
+  Enabled: false
