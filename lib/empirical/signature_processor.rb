@@ -56,7 +56,7 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 			case signature
 			# parameterless method defs (e.g. `fun foo` or `fun foo()`)
 			in Prism::LocalVariableReadNode | Prism::ConstantReadNode
-				# no-op
+			# no-op
 			# parameterful method defs (e.g. `fun foo(a: Type)` or `fun foo(a = Type)`)
 			in Prism::CallNode
 				raise SyntaxError if signature.block
@@ -107,6 +107,20 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 					in Prism::KeywordHashNode
 						argument.elements.each do |argument|
 							name = argument.key.unescaped
+
+							nilable = false
+
+							if name.end_with?("?")
+								name = name[0..-2]
+								nilable = true
+
+								@annotations << [
+									argument.key.location.end_offset - 2,
+									1,
+									"",
+								]
+							end
+
 							typed_param = argument.value
 
 							case typed_param
@@ -131,10 +145,20 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 								case typed_param
 								# Keyword with default
 								in Prism::CallNode[name: :|, receiver: type, arguments: Prism::ArgumentsNode[arguments: [default]]]
-									type_slice = type.slice
+									type_slice = if nilable
+										"::Literal::_Nilable(#{type.slice})"
+									else
+										type.slice
+									end
+
 									default_string = default.slice
 								else
-									type_slice = typed_param.slice
+									type_slice = if nilable
+										"::Literal::_Nilable(#{typed_param.slice})"
+									else
+										typed_param.slice
+									end
+
 									default_string = "nil"
 								end
 

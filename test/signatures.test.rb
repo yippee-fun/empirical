@@ -185,3 +185,15 @@ test "basic empty function with void return" do
 		;);::Empirical::Void;end
 	RUBY
 end
+
+test "basic empty function with nilable type" do
+	processed = Empirical.process(<<~RUBY, with: Empirical::SignatureProcessor)
+		fun foo(name?: String) => void do
+		end
+	RUBY
+
+	assert_equal_ruby processed, <<~RUBY
+		def foo(name: nil);raise(::Empirical::TypeError.argument_type_error(name: 'name', value: name, expected: ::Literal::_Nilable(String), method_name: __method__, context: self)) unless ::Literal::_Nilable(String) === name;__literally_returns__ = (;
+		;);::Empirical::Void;end
+	RUBY
+end
