@@ -1,6 +1,6 @@
 # Empirical
 
-> (_adjective_) based on what is experienced or seen rather than on theory
+> (_adjective_) based on what is experienced or seen rather than on theory \
 > (_noun_) enhancements for Ruby with a runtime type system
 
 Empirical catches bugs early and makes your code self-documenting by enhancing Ruby with beautiful syntax to define runtime type assertions.
