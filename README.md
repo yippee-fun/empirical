@@ -1,10 +1,9 @@
 # Empirical
 
-Empirical pre-processes your code so that, automatically:
+> (_adjective_) based on what is experienced or seen rather than on theory  
+> (_noun_) enhancements for Ruby with a runtime type system
 
-1. instance variable reads are guarded against undefined,
-2. you can define type checked method definitions via the `fun` keyword (instead of `def`), and
-3. you can define class/module defined callbacks via the `class_defined`/`module_defined` methods
+Empirical helps you prevent bugs and make your code self-documenting by enhancing Ruby with a rich and beautiful runtime type system (see [below](#runtime-typing)).
 
 ## Setup
 
