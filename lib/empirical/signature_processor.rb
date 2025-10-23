@@ -253,7 +253,7 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 				[
 					node.location.end_offset,
 					0,
-					");(raise ::Empirical::TypeError.return_type_error(value: __literally_returning__, expected: #{@return_type}, method_name: __method__, context: self) unless #{@return_type} === __literally_returning__);return(__literally_returning__))",
+					");(raise ::Empirical::TypeError.return_type_error(value: __literally_returning__, expected: #{@return_type.slice}, method_name: __method__, context: self) unless #{@return_type.slice} === __literally_returning__);return(__literally_returning__))",
 				]
 			)
 		end
