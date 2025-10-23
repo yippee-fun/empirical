@@ -2,7 +2,7 @@
 
 ## Setup
 
-Install the gem by adding it to your `Gemfile` and running `bundle install`. You’ll probably want to set it to `require: false` here because you should require it manually at precisely the right moment.
+Install the gem by adding it to your <kbd>Gemfile</kbd> and running <kbd>bundle install</kbd>. You’ll probably want to set it to `require: false` here because you should require it manually at precisely the right moment.
 
 ```ruby
 gem "empirical", require: false
