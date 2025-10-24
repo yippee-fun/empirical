@@ -83,7 +83,7 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 						param_type_slice = "::Literal::_Array(#{type.slice})"
 						param_type_ident = unique_type_ident(param_type_slice)
 
-						post_end_buffer << "::Empirical::TypeStore::#{param_type_ident} = #{param_type_slice}"
+						post_end_buffer << store_type(param_type_slice, as: param_type_ident)
 						post_def_buffer << argument_type_check(name:, type: param_type_ident)
 
 					# Positional (e.g. `a = Type` becomes `a = nil` or `a = default`)
@@ -108,7 +108,7 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 
 						param_type_ident = unique_type_ident(param_type_slice)
 
-						post_end_buffer << "::Empirical::TypeStore::#{param_type_ident} = #{param_type_slice}"
+						post_end_buffer << store_type(param_type_slice, as: param_type_ident)
 						post_def_buffer << argument_type_check(name:, type: param_type_ident)
 
 					# Keyword (e.g. `a: Type` becomes `a: nil` or `a: default`)
@@ -151,7 +151,7 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 								param_type_slice = "::Literal::_Hash(#{key_type.slice}, #{value_type.slice})"
 								param_type_ident = unique_type_ident(param_type_slice)
 
-								post_end_buffer << "::Empirical::TypeStore::#{param_type_ident} = #{param_type_slice}"
+								post_end_buffer << store_type(param_type_slice, as: param_type_ident)
 								post_def_buffer << argument_type_check(name:, type: param_type_ident)
 							else
 								case typed_param
@@ -183,7 +183,7 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 
 								param_type_ident = unique_type_ident(param_type_slice)
 
-								post_end_buffer << "::Empirical::TypeStore::#{param_type_ident} = #{param_type_slice}"
+								post_end_buffer << store_type(param_type_slice, as: param_type_ident)
 								post_def_buffer << argument_type_check(name:, type: param_type_ident)
 							end
 						end
@@ -259,6 +259,10 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 	# Takes a type as a string and converts it into a unique constant identifier
 	private def unique_type_ident(type)
 		"T__#{type.tr('()', '_').gsub(/[^a-zA-Z0-9_]/, '')}__#{SecureRandom.alphanumeric(32)}"
+	end
+
+	private def store_type(type, as:)
+		"::Empirical::TypeStore::#{as} = #{type}"
 	end
 
 	def visit_return_node(node)
