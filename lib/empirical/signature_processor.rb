@@ -52,6 +52,7 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 			body_block = node.block || @block_stack.first
 			preamble = []
 			postamble = []
+			finalamble = []
 
 			case signature
 			# parameterless method defs (e.g. `fun foo` or `fun foo()`)
@@ -214,6 +215,13 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 				body_block.closing_loc.start_offset,
 				0,
 				";#{postamble.join(';')};",
+			]
+
+			# Insert finalamble
+			@annotations << [
+				body_block.closing_loc.end_offset,
+				0,
+				";#{finalamble.join(';')};",
 			]
 		else
 			# TODO: better error message
