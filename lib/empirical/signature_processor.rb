@@ -81,8 +81,10 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 						]
 
 						param_type_slice = "::Literal::_Array(#{type.slice})"
+						param_type_ident = unique_type_ident(param_type_slice)
 
-						post_def_buffer << argument_type_check(name:, type: param_type_slice)
+						post_end_buffer << "::Empirical::TypeStore::#{param_type_ident} = #{param_type_slice}"
+						post_def_buffer << argument_type_check(name:, type: param_type_ident)
 
 					# Positional (e.g. `a = Type` becomes `a = nil` or `a = default`)
 					in Prism::LocalVariableWriteNode[name: name, value: typed_param]
@@ -104,7 +106,10 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 							default_string,
 						]
 
-						post_def_buffer << argument_type_check(name:, type: param_type_slice)
+						param_type_ident = unique_type_ident(param_type_slice)
+
+						post_end_buffer << "::Empirical::TypeStore::#{param_type_ident} = #{param_type_slice}"
+						post_def_buffer << argument_type_check(name:, type: param_type_ident)
 
 					# Keyword (e.g. `a: Type` becomes `a: nil` or `a: default`)
 					in Prism::KeywordHashNode
@@ -144,8 +149,10 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 								]
 
 								param_type_slice = "::Literal::_Hash(#{key_type.slice}, #{value_type.slice})"
+								param_type_ident = unique_type_ident(param_type_slice)
 
-								post_def_buffer << argument_type_check(name:, type: param_type_slice)
+								post_end_buffer << "::Empirical::TypeStore::#{param_type_ident} = #{param_type_slice}"
+								post_def_buffer << argument_type_check(name:, type: param_type_ident)
 							else
 								case typed_param
 								# Keyword with default
@@ -174,7 +181,10 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 									default_string,
 								]
 
-								post_def_buffer << argument_type_check(name:, type: param_type_slice)
+								param_type_ident = unique_type_ident(param_type_slice)
+
+								post_end_buffer << "::Empirical::TypeStore::#{param_type_ident} = #{param_type_slice}"
+								post_def_buffer << argument_type_check(name:, type: param_type_ident)
 							end
 						end
 					else
@@ -196,7 +206,12 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 			in Prism::LocalVariableReadNode[name: :never] | Prism::CallNode[name: :never, receiver: nil, block: nil, arguments: nil]
 				pre_end_buffer << "raise(::Empirical::NeverError.new)"
 			else
-				pre_end_buffer << "raise(::Empirical::TypeError.return_type_error(value: __literally_returns__, expected: #{return_type.slice}, method_name: __method__, context: self)) unless #{return_type.slice} === __literally_returns__"
+				return_type_slice = return_type.slice
+				return_type_ident = unique_type_ident(return_type_slice)
+
+				post_end_buffer << "::Empirical::TypeStore::#{return_type_ident} = #{return_type_slice}"
+
+				pre_end_buffer << "raise(::Empirical::TypeError.return_type_error(value: __literally_returns__, expected: ::Empirical::TypeStore::#{return_type_ident}, method_name: __method__, context: self)) unless ::Empirical::TypeStore::#{return_type_ident} === __literally_returns__"
 				pre_end_buffer << "__literally_returns__"
 			end
 
@@ -238,7 +253,12 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 	end
 
 	private def argument_type_check(name:, type:)
-		"raise(::Empirical::TypeError.argument_type_error(name: '#{name}', value: #{name}, expected: #{type}, method_name: __method__, context: self)) unless #{type} === #{name}"
+		"raise(::Empirical::TypeError.argument_type_error(name: '#{name}', value: #{name}, expected: ::Empirical::TypeStore::#{type}, method_name: __method__, context: self)) unless ::Empirical::TypeStore::#{type} === #{name}"
+	end
+
+	# Takes a type as a string and converts it into a unique constant identifier
+	private def unique_type_ident(type)
+		"T__#{type.tr('()', '_').gsub(/[^a-zA-Z0-9_]/, '')}__#{SecureRandom.alphanumeric(32)}"
 	end
 
 	def visit_return_node(node)
