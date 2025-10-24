@@ -12,6 +12,8 @@ require "empirical/eval_processor"
 require "empirical/class_callbacks_processor"
 require "empirical/signature_processor"
 require "empirical/configuration"
+require "empirical/types"
+require "empirical/signature"
 
 require "require-hooks/setup"
 
@@ -27,6 +29,7 @@ module Empirical
 	EMPTY_ARRAY = [].freeze
 	EVERYTHING = ["**/*"].freeze
 	METHOD_METHOD = Module.instance_method(:method)
+	OVERLOADED_METHODS = Hash.new #ObjectSpace::WeakMap.new
 
 	TypeStore = Module.new
 
@@ -90,6 +93,20 @@ module Empirical
 		end
 
 		buffer
+	end
+
+	def self.generate_root_overloaded_method(context, method_name)
+		context.module_eval <<~RUBY
+			def #{method_name}(*args, **kwargs, &block)
+				::Empirical::OVERLOADED_METHODS[self.method(__method__).owner][:#{method_name}].each do |signature_obj|
+					if signature_obj.positional_params_type === args && signature_obj.keyword_params_type === kwargs
+					  return __send__(signature_obj.method_ident, *args, **kwargs, &block)
+					end
+				end
+
+				raise NoMatchingPatternError
+			end
+		RUBY
 	end
 end
 
