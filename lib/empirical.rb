@@ -28,6 +28,8 @@ module Empirical
 	EVERYTHING = ["**/*"].freeze
 	METHOD_METHOD = Module.instance_method(:method)
 
+	TypeStore = Module.new
+
 	CONFIG = Configuration.new
 	PROCESSORS = [
 		IvarProcessor,
