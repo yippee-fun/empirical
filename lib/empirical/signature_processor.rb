@@ -50,9 +50,9 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 			]
 		}
 			body_block = node.block || @block_stack.first
-			preamble = []
-			postamble = []
-			finalamble = []
+			post_def_buffer = []
+			pre_end_buffer = []
+			post_end_buffer = []
 
 			case signature
 			# parameterless method defs (e.g. `fun foo` or `fun foo()`)
@@ -80,18 +80,20 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 							"",
 						]
 
-						preamble << "raise(::Empirical::TypeError.argument_type_error(name: '#{name}', value: #{name}, expected: ::Literal::_Array(#{type.slice}), method_name: __method__, context: self)) unless ::Literal::_Array(#{type.slice}) === #{name}"
+						param_type_slice = "::Literal::_Array(#{type.slice})"
+
+						post_def_buffer << argument_type_check(name:, type: param_type_slice)
 
 					# Positional (e.g. `a = Type` becomes `a = nil` or `a = default`)
 					in Prism::LocalVariableWriteNode[name: name, value: typed_param]
 						case typed_param
 						# Positional with default (e.g. `a = Type | 1` becomes `a = 1`)
 						in Prism::CallNode[name: :|, receiver: type, arguments: Prism::ArgumentsNode[arguments: [default]]]
-							type_slice = type.slice
+							param_type_slice = type.slice
 							default_string = default.slice
 						# Positional without default (e.g. `a = Type` becomes `a = nil`)
 						else
-							type_slice = typed_param.slice
+							param_type_slice = typed_param.slice
 							default_string = "nil"
 						end
 
@@ -102,7 +104,7 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 							default_string,
 						]
 
-						preamble << "raise(::Empirical::TypeError.argument_type_error(name: '#{name}', value: #{name}, expected: #{type_slice}, method_name: __method__, context: self)) unless #{type_slice} === #{name}"
+						post_def_buffer << argument_type_check(name:, type: param_type_slice)
 
 					# Keyword (e.g. `a: Type` becomes `a: nil` or `a: default`)
 					in Prism::KeywordHashNode
@@ -141,12 +143,14 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 									"",
 								]
 
-								preamble << "raise(::Empirical::TypeError.argument_type_error(name: '#{name}', value: #{name}, expected: ::Literal::_Hash(#{key_type.slice}, #{value_type.slice}), method_name: __method__, context: self)) unless ::Literal::_Hash(#{key_type.slice}, #{value_type.slice}) === #{name}"
+								param_type_slice = "::Literal::_Hash(#{key_type.slice}, #{value_type.slice})"
+
+								post_def_buffer << argument_type_check(name:, type: param_type_slice)
 							else
 								case typed_param
 								# Keyword with default
 								in Prism::CallNode[name: :|, receiver: type, arguments: Prism::ArgumentsNode[arguments: [default]]]
-									type_slice = if nilable
+									param_type_slice = if nilable
 										"::Literal::_Nilable(#{type.slice})"
 									else
 										type.slice
@@ -154,7 +158,7 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 
 									default_string = default.slice
 								else
-									type_slice = if nilable
+									param_type_slice = if nilable
 										"::Literal::_Nilable(#{typed_param.slice})"
 									else
 										typed_param.slice
@@ -170,7 +174,7 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 									default_string,
 								]
 
-								preamble << "raise(::Empirical::TypeError.argument_type_error(name: '#{name}', value: #{name}, expected: #{type_slice}, method_name: __method__, context: self)) unless #{type_slice} === #{name}"
+								post_def_buffer << argument_type_check(name:, type: param_type_slice)
 							end
 						end
 					else
@@ -183,17 +187,17 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 				raise SyntaxError
 			end
 
-			preamble << "__literally_returns__ = ("
-			postamble << ")"
+			post_def_buffer << "__literally_returns__ = ("
+			pre_end_buffer << ")"
 
 			case return_type
 			in Prism::LocalVariableReadNode[name: :void] | Prism::CallNode[name: :void, receiver: nil, block: nil, arguments: nil]
-				postamble << "::Empirical::Void"
+				pre_end_buffer << "::Empirical::Void"
 			in Prism::LocalVariableReadNode[name: :never] | Prism::CallNode[name: :never, receiver: nil, block: nil, arguments: nil]
-				postamble << "raise(::Empirical::NeverError.new)"
+				pre_end_buffer << "raise(::Empirical::NeverError.new)"
 			else
-				postamble << "raise(::Empirical::TypeError.return_type_error(value: __literally_returns__, expected: #{return_type.slice}, method_name: __method__, context: self)) unless #{return_type.slice} === __literally_returns__"
-				postamble << "__literally_returns__"
+				pre_end_buffer << "raise(::Empirical::TypeError.return_type_error(value: __literally_returns__, expected: #{return_type.slice}, method_name: __method__, context: self)) unless #{return_type.slice} === __literally_returns__"
+				pre_end_buffer << "__literally_returns__"
 			end
 
 			# Replace `fun` with `def`
@@ -203,32 +207,38 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 				"def",
 			]
 
-			# Remove the return type and `do` and replace with preamble
+			# Remove the return type and `do` and replace with post_def_buffer
 			@annotations << [
 				(start = signature.location.end_offset),
 				body_block.opening_loc.end_offset - start,
-				";#{preamble.join(';')};",
+				";#{post_def_buffer.join(';')};",
 			]
 
-			# Insert postamble
+			# Insert pre_end_buffer
 			@annotations << [
 				body_block.closing_loc.start_offset,
 				0,
-				";#{postamble.join(';')};",
+				";#{pre_end_buffer.join(';')};",
 			]
 
-			# Insert finalamble
-			@annotations << [
-				body_block.closing_loc.end_offset,
-				0,
-				";#{finalamble.join(';')};",
-			]
+			# Insert post_end_buffer
+			if post_end_buffer.any?
+				@annotations << [
+					body_block.closing_loc.end_offset,
+					0,
+					";#{post_end_buffer.join(';')};",
+				]
+			end
 		else
 			# TODO: better error message
 			raise SyntaxError
 		end
 
 		return_type
+	end
+
+	private def argument_type_check(name:, type:)
+		"raise(::Empirical::TypeError.argument_type_error(name: '#{name}', value: #{name}, expected: #{type}, method_name: __method__, context: self)) unless #{type} === #{name}"
 	end
 
 	def visit_return_node(node)
