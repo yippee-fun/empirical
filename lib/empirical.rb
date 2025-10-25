@@ -11,6 +11,7 @@ require "empirical/ivar_processor"
 require "empirical/eval_processor"
 require "empirical/class_callbacks_processor"
 require "empirical/signature_processor"
+require "empirical/attr_processor"
 require "empirical/configuration"
 require "empirical/types"
 require "empirical/signature"
@@ -37,6 +38,7 @@ module Empirical
 	PROCESSORS = [
 		IvarProcessor,
 		SignatureProcessor,
+		AttrProcessor,
 		ClassCallbacksProcessor,
 	]
 
