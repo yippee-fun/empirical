@@ -9,16 +9,26 @@
 # syntax could work...
 class Empirical::AttrProcessor < Empirical::BaseProcessor
 	ATTR_METHODS = Set[:attr_accessor, :attr_reader, :attr_writer].freeze
+	VISIBILITY_METHODS = Set[:private, :protected, :public].freeze
 
 	def visit_call_node(node)
-		if ATTR_METHODS.include?(node.name)
+		# Check if this is a visibility modifier wrapping an attr call, we need it for oua generated methods
+		if VISIBILITY_METHODS.include?(node.name) && node.arguments
+			arg = node.arguments.arguments.first
+			if arg.is_a?(Prism::CallNode) && ATTR_METHODS.include?(arg.name)
+				visit_attr_call_node(arg, visibility: node.name)
+			end
+			# TODO: We don't call super because we have effectively handled the modifier ourselves
+			# ... though the original methods visibility is now not set correct?
+			return
+		elsif ATTR_METHODS.include?(node.name)
 			visit_attr_call_node(node)
 		end
 
 		super
 	end
 
-	def visit_attr_call_node(node)
+	def visit_attr_call_node(node, visibility: nil)
 		# TODO: improve errors, as per `fun`
 		raise SyntaxError unless node.arguments
 		raise SyntaxError if node.receiver
@@ -62,9 +72,9 @@ class Empirical::AttrProcessor < Empirical::BaseProcessor
 			# TODO: here we check on read for attr_readre and on write for writer/accessor, makes sense?
 			case node.name
 			when :attr_reader
-				post_end_buffer << typed_getter(attr_name, attr_type_ident)
+				post_end_buffer << typed_getter(attr_name, attr_type_ident, visibility)
 			when :attr_writer, :attr_accessor
-				post_end_buffer << typed_setter(attr_name, attr_type_ident)
+				post_end_buffer << typed_setter(attr_name, attr_type_ident, visibility)
 			end
 		end
 
@@ -94,12 +104,16 @@ class Empirical::AttrProcessor < Empirical::BaseProcessor
 	end
 
 	# TODO: readability!
-	def typed_getter(attr_name, type_ident)
-		"alias_method(:__original_#{attr_name}, :#{attr_name});def #{attr_name};__value = __original_#{attr_name};raise(::Empirical::TypeError.attr_type_error(name: '#{attr_name}', value: __value, expected: ::Empirical::TypeStore::#{type_ident}, attr_type: 'reader', context: self)) unless ::Empirical::TypeStore::#{type_ident} === __value;__value;end"
+	def typed_getter(attr_name, type_ident, visibility = nil)
+		code = "alias_method(:__original_#{attr_name}, :#{attr_name});def #{attr_name};__value = __original_#{attr_name};raise(::Empirical::TypeError.attr_type_error(name: '#{attr_name}', value: __value, expected: ::Empirical::TypeStore::#{type_ident}, attr_type: 'reader', context: self)) unless ::Empirical::TypeStore::#{type_ident} === __value;__value;end"
+		code += ";#{visibility} :#{attr_name}" if visibility
+		code
 	end
 
-	def typed_setter(attr_name, type_ident)
-		"alias_method(:__original_#{attr_name}=, :#{attr_name}=);def #{attr_name}=(value);raise(::Empirical::TypeError.attr_type_error(name: '#{attr_name}', value: value, expected: ::Empirical::TypeStore::#{type_ident}, attr_type: 'writer', context: self)) unless ::Empirical::TypeStore::#{type_ident} === value;send(:__original_#{attr_name}=, value);end"
+	def typed_setter(attr_name, type_ident, visibility = nil)
+		code = "alias_method(:__original_#{attr_name}=, :#{attr_name}=);def #{attr_name}=(value);raise(::Empirical::TypeError.attr_type_error(name: '#{attr_name}', value: value, expected: ::Empirical::TypeStore::#{type_ident}, attr_type: 'writer', context: self)) unless ::Empirical::TypeStore::#{type_ident} === value;send(:__original_#{attr_name}=, value);end"
+		code += ";#{visibility} :#{attr_name}=" if visibility
+		code
 	end
 
 	# TODO: duplication
