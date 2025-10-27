@@ -19,9 +19,11 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 		# because the body block is attached to that call node,
 		# not the `fun` call node
 		in { block: Prism::BlockNode }
-			@block_stack << node.block
-			super
+			@block_stack << node
+			visit node.receiver
+			visit node.arguments
 			@block_stack.pop
+			visit node.block
 		else
 			original_return_type = @return_type
 			super # ensures any early returns are processed (also, technically, any internal method defs)
@@ -33,6 +35,8 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 		# TODO: better error messages
 		raise SyntaxError unless node.arguments
 		raise SyntaxError unless nil == node.receiver
+
+		method_name = nil
 
 		case node
 		in {
@@ -49,15 +53,32 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 				]
 			]
 		}
-			body_block = node.block || @block_stack.first
+			method_name = signature.name
+			body_block = node.block || @block_stack.first.block
 			post_def_buffer = []
 			pre_end_buffer = []
 			post_end_buffer = []
+			positional_splat_type_buffer = []
+			positional_params_type_buffer = []
+			keyword_params_type_buffer = []
+			keyword_splat_type_buffer = []
+
+			overloading = @block_stack.any? { it.name == :overload }
+
+			if overloading
+				overloaded_name = unique_method_ident(signature.slice)
+
+				@annotations << [
+					(start = signature.message_loc.start_offset),
+					signature.message_loc.end_offset - start,
+					overloaded_name,
+				]
+			end
 
 			case signature
 			# parameterless method defs (e.g. `fun foo` or `fun foo()`)
 			in Prism::LocalVariableReadNode | Prism::ConstantReadNode
-			# no-op
+				# no-op
 			# parameterful method defs (e.g. `fun foo(a: Type)` or `fun foo(a = Type)`)
 			in Prism::CallNode
 				raise SyntaxError if signature.block
@@ -83,6 +104,7 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 						param_type_slice = "::Literal::_Array(#{type.slice})"
 						param_type_ident = unique_type_ident(param_type_slice)
 
+						positional_splat_type_buffer << param_type_ident
 						post_end_buffer << store_type(param_type_slice, as: param_type_ident)
 						post_def_buffer << argument_type_check(name:, type: param_type_ident)
 
@@ -108,6 +130,7 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 
 						param_type_ident = unique_type_ident(param_type_slice)
 
+						positional_params_type_buffer << "::Empirical::TypeStore::#{param_type_ident}"
 						post_end_buffer << store_type(param_type_slice, as: param_type_ident)
 						post_def_buffer << argument_type_check(name:, type: param_type_ident)
 
@@ -151,6 +174,7 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 								param_type_slice = "::Literal::_Hash(#{key_type.slice}, #{value_type.slice})"
 								param_type_ident = unique_type_ident(param_type_slice)
 
+								keyword_splat_type_buffer << "#{name}: ::Empirical::TypeStore::#{param_type_ident}"
 								post_end_buffer << store_type(param_type_slice, as: param_type_ident)
 								post_def_buffer << argument_type_check(name:, type: param_type_ident)
 							else
@@ -183,6 +207,7 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 
 								param_type_ident = unique_type_ident(param_type_slice)
 
+								keyword_params_type_buffer << "#{name}: ::Empirical::TypeStore::#{param_type_ident}"
 								post_end_buffer << store_type(param_type_slice, as: param_type_ident)
 								post_def_buffer << argument_type_check(name:, type: param_type_ident)
 							end
@@ -199,6 +224,11 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 
 			post_def_buffer << "__literally_returns__ = ("
 			pre_end_buffer << ")"
+
+			if overloading
+				post_end_buffer << "((::Empirical::OVERLOADED_METHODS[self] ||= {})[:#{method_name}] ||= []) << ::Empirical::Signature.new(method_ident: :#{overloaded_name}, positional_params_type: ::Empirical::PositionalParamsType.new(types: [#{positional_params_type_buffer.join(", ")}], rest: #{positional_splat_type_buffer.first || 'nil'}), keyword_params_type: ::Empirical::KeywordParamsType.new(types: {#{keyword_params_type_buffer.join(", ")}}, rest: #{keyword_splat_type_buffer.first || 'nil'}))"
+				post_end_buffer << "::Empirical.generate_root_overloaded_method(self, :#{method_name})"
+			end
 
 			case return_type
 			in Prism::LocalVariableReadNode[name: :void] | Prism::CallNode[name: :void, receiver: nil, block: nil, arguments: nil]
@@ -263,6 +293,11 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 
 	private def store_type(type, as:)
 		"::Empirical::TypeStore::#{as} = #{type}"
+	end
+
+	# Takes a signature as a string and converts it into a unique method identifier
+	private def unique_method_ident(signature)
+		"#{signature.tr('()', '_').gsub(/[^a-zA-Z0-9_]/, '')}__#{SecureRandom.alphanumeric(32)}"
 	end
 
 	def visit_return_node(node)
