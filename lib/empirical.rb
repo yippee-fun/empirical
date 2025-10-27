@@ -29,7 +29,7 @@ module Empirical
 	EMPTY_ARRAY = [].freeze
 	EVERYTHING = ["**/*"].freeze
 	METHOD_METHOD = Module.instance_method(:method)
-	OVERLOADED_METHODS = Hash.new #ObjectSpace::WeakMap.new
+	OVERLOADED_METHODS = ObjectSpace::WeakKeyMap.new
 
 	TypeStore = Module.new
 
