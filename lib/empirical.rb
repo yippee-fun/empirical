@@ -85,22 +85,27 @@ module Empirical
 
 		Empirical::EvalProcessor.new(annotations:).visit(tree)
 
-		buffer = source.dup
 		annotations.sort_by!(&:first)
 
-		annotations.reverse_each do |offset, length, string|
-			buffer[offset, length] = string
+		buffer = +""
+		source_position = 0
+
+		annotations.each do |offset, length, string|
+			buffer << source.byteslice(source_position, offset - source_position)
+			buffer << string
+			source_position = offset + length
 		end
 
+		buffer << source.byteslice(source_position, source.bytesize - source_position)
 		buffer
 	end
 
 	def self.generate_root_overloaded_method(context, method_name)
 		context.module_eval <<~RUBY
 			def #{method_name}(*args, **kwargs, &block)
-				::Empirical::OVERLOADED_METHODS[self.method(__method__).owner][:#{method_name}].each do |signature_obj|
-					if signature_obj.positional_params_type === args && signature_obj.keyword_params_type === kwargs
-					  return __send__(signature_obj.method_ident, *args, **kwargs, &block)
+				::Empirical::OVERLOADED_METHODS[self.method(:#{method_name}).owner][:#{method_name}].each do |sig|
+					if sig.positional_params_type === args && sig.keyword_params_type === kwargs
+					  return __send__(sig.method_ident, *args, **kwargs, &block)
 					end
 				end
 
