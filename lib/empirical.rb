@@ -110,6 +110,12 @@ module Empirical
 	end
 end
 
+class Module
+	def overload(method_name)
+		method_name
+	end
+end
+
 class Object
 	include Literal::Types
 end
