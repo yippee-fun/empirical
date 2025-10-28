@@ -65,16 +65,6 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 
 			overloading = @block_stack.any? { it.name == :overload }
 
-			if overloading
-				overloaded_name = unique_method_ident(signature.slice)
-
-				@annotations << [
-					(start = signature.message_loc.start_offset),
-					signature.message_loc.end_offset - start,
-					overloaded_name,
-				]
-			end
-
 			case signature
 			# parameterless method defs (e.g. `fun foo` or `fun foo()`)
 			in Prism::LocalVariableReadNode | Prism::ConstantReadNode
@@ -207,7 +197,7 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 			pre_end_buffer << ")"
 
 			if overloading
-				post_end_buffer << "((::Empirical::OVERLOADED_METHODS[self] ||= {})[:#{method_name}] ||= []) << ::Empirical::Signature.new(method_ident: :#{overloaded_name}, positional_params_type: ::Empirical::PositionalParamsType.new(types: [#{positional_params_type_buffer.join(', ')}], rest: #{positional_splat_type_buffer.first || 'nil'}), keyword_params_type: ::Empirical::KeywordParamsType.new(types: {#{keyword_params_type_buffer.join(', ')}}, rest: #{keyword_splat_type_buffer.first || 'nil'}))"
+				post_end_buffer << "((::Empirical::OVERLOADED_METHODS[self] ||= {})[:#{method_name}] ||= []) << ::Empirical::Signature.new(method: instance_method(:#{method_name}), positional_params_type: ::Empirical::PositionalParamsType.new(types: [#{positional_params_type_buffer.join(', ')}], rest: #{positional_splat_type_buffer.first || 'nil'}), keyword_params_type: ::Empirical::KeywordParamsType.new(types: {#{keyword_params_type_buffer.join(', ')}}, rest: #{keyword_splat_type_buffer.first || 'nil'}))"
 				post_end_buffer << "::Empirical.generate_root_overloaded_method(self, :#{method_name})"
 			end
 

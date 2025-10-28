@@ -105,7 +105,7 @@ module Empirical
 			def #{method_name}(*args, **kwargs, &block)
 				::Empirical::OVERLOADED_METHODS[self.method(:#{method_name}).owner][:#{method_name}].each do |sig|
 					if sig.positional_params_type === args && sig.keyword_params_type === kwargs
-					  return __send__(sig.method_ident, *args, **kwargs, &block)
+						return sig.method.bind_call(self, *args, **kwargs, &block)
 					end
 				end
 
