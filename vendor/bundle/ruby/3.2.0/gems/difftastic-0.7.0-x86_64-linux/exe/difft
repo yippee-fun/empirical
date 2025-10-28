@@ -1,0 +1,7 @@
+#! /usr/bin/env ruby
+# frozen_string_literal: true
+
+# because rubygems shims assume a gem's executables are Ruby
+
+require "difftastic"
+exec(Difftastic.executable, *ARGV)
