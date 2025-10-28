@@ -12,7 +12,7 @@ Gem::Specification.new do |spec|
 	spec.description = "Based on, concerned with, or verifiable by observation or experience rather than theory or pure logic."
 	spec.homepage = "https://github.com/yippee-fun/empirical"
 	spec.license = "MIT"
-	spec.required_ruby_version = ">= 3.1"
+	spec.required_ruby_version = ">= 3.3"
 
 	spec.metadata["homepage_uri"] = spec.homepage
 	spec.metadata["source_code_uri"] = "https://github.com/yippee-fun/empirical"

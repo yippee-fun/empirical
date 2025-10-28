@@ -9,7 +9,7 @@
 /exe/*/
 test/dummy/log/test.log
 .DS_Store
-vendor/cache/*
+vendor/
 .rubocop-*
 *.gem
 Gemfile.lock
