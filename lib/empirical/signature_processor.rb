@@ -78,7 +78,7 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 			case signature
 			# parameterless method defs (e.g. `fun foo` or `fun foo()`)
 			in Prism::LocalVariableReadNode | Prism::ConstantReadNode
-				# no-op
+			# no-op
 			# parameterful method defs (e.g. `fun foo(a: Type)` or `fun foo(a = Type)`)
 			in Prism::CallNode
 				raise SyntaxError if signature.block
@@ -110,16 +110,8 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 
 					# Positional (e.g. `a = Type` becomes `a = nil` or `a = default`)
 					in Prism::LocalVariableWriteNode[name: name, value: typed_param]
-						case typed_param
-						# Positional with default (e.g. `a = Type | 1` becomes `a = 1`)
-						in Prism::CallNode[name: :|, receiver: type, arguments: Prism::ArgumentsNode[arguments: [default]]]
-							param_type_slice = type.slice
-							default_string = default.slice
-						# Positional without default (e.g. `a = Type` becomes `a = nil`)
-						else
-							param_type_slice = typed_param.slice
-							default_string = "nil"
-						end
+						param_type_slice = typed_param.slice
+						default_string = "nil"
 
 						# replace the typed_param from the argument with the appropriate default value
 						@annotations << [
@@ -178,25 +170,14 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 								post_end_buffer << store_type(param_type_slice, as: param_type_ident)
 								post_def_buffer << argument_type_check(name:, type: param_type_ident)
 							else
-								case typed_param
-								# Keyword with default
-								in Prism::CallNode[name: :|, receiver: type, arguments: Prism::ArgumentsNode[arguments: [default]]]
-									param_type_slice = if nilable
-										"::Literal::_Nilable(#{type.slice})"
-									else
-										type.slice
-									end
 
-									default_string = default.slice
+								param_type_slice = if nilable
+									"::Literal::_Nilable(#{typed_param.slice})"
 								else
-									param_type_slice = if nilable
-										"::Literal::_Nilable(#{typed_param.slice})"
-									else
-										typed_param.slice
-									end
-
-									default_string = "nil"
+									typed_param.slice
 								end
+
+								default_string = "nil"
 
 								# replace the typed_param from the argument with the appropriate default value
 								@annotations << [
@@ -226,7 +207,7 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 			pre_end_buffer << ")"
 
 			if overloading
-				post_end_buffer << "((::Empirical::OVERLOADED_METHODS[self] ||= {})[:#{method_name}] ||= []) << ::Empirical::Signature.new(method_ident: :#{overloaded_name}, positional_params_type: ::Empirical::PositionalParamsType.new(types: [#{positional_params_type_buffer.join(", ")}], rest: #{positional_splat_type_buffer.first || 'nil'}), keyword_params_type: ::Empirical::KeywordParamsType.new(types: {#{keyword_params_type_buffer.join(", ")}}, rest: #{keyword_splat_type_buffer.first || 'nil'}))"
+				post_end_buffer << "((::Empirical::OVERLOADED_METHODS[self] ||= {})[:#{method_name}] ||= []) << ::Empirical::Signature.new(method_ident: :#{overloaded_name}, positional_params_type: ::Empirical::PositionalParamsType.new(types: [#{positional_params_type_buffer.join(', ')}], rest: #{positional_splat_type_buffer.first || 'nil'}), keyword_params_type: ::Empirical::KeywordParamsType.new(types: {#{keyword_params_type_buffer.join(', ')}}, rest: #{keyword_splat_type_buffer.first || 'nil'}))"
 				post_end_buffer << "::Empirical.generate_root_overloaded_method(self, :#{method_name})"
 			end
 
