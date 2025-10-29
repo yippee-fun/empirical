@@ -6,3 +6,6 @@ AllCops:
 
 Style/RedundantSelf:
   Enabled: false
+
+Lint/EmptyFile:
+  Enabled: false
