@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 class Empirical::TypeError < ::TypeError
 	def self.argument_type_error(name:, value:, expected:, method_name:, context:)
 		owner = context.method(method_name).owner

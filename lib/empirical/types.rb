@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Empirical
 	class PositionalParamsType
 		def initialize(types: [], rest: nil)
