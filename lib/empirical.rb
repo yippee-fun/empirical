@@ -100,9 +100,19 @@ module Empirical
 		buffer
 	end
 
-	def self.generate_root_overloaded_method(context, method_name)
-		context.module_eval <<~RUBY
-			def #{method_name}(*args, **kwargs, &block)
+	def self.generate_root_overloaded_method(owner, method_name)
+		visibility = if owner.public_instance_methods.include?(method_name)
+			:public
+		elsif owner.protected_instance_methods.include?(method_name)
+			:protected
+		elsif owner.private_instance_methods.include?(method_name)
+			:private
+		else
+			raise "No existing definition for the method #{method_name}."
+		end
+
+		owner.module_eval <<~RUBY
+			#{visibility} def #{method_name}(*args, **kwargs, &block)
 				::Empirical::OVERLOADED_METHODS[self.method(:#{method_name}).owner][:#{method_name}].each do |sig|
 					if sig.positional_params_type === args && sig.keyword_params_type === kwargs
 						return sig.method.bind_call(self, *args, **kwargs, &block)
