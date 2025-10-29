@@ -11,8 +11,6 @@ jobs:
       matrix:
         os: ["ubuntu-latest", "macos-latest"]
         ruby-version:
-          - "3.2"
-          - "3.3"
           - "3.4"
           - "head"
 
@@ -28,7 +26,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          bundle install --jobs 4 --without development
+          bundle install --jobs 4
 
       - name: Quickdraw Tests
         run: bundle exec qt -t 1
