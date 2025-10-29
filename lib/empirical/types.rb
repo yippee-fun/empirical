@@ -4,22 +4,23 @@ module Empirical
 	class PositionalParamsType
 		def initialize(types: [], rest: nil)
 			@types = types
-			@rest = rest
+			@rest_type = rest
 		end
 
 		def ===(value)
-			return false unless Array === value
+			types = @types
 
-			init = value.take(@types.size)
+			i, len = 0, types.length
+			while i < len
+				return false unless types[i] === value[i]
+				i += 1
+			end
 
-			return false unless _Tuple(*@types) === init
-
-			rest = value.drop(@types.size)
-
-			if @rest
-				return false unless @rest === rest
+			if (rest_type = @rest_type)
+				rest = value.drop(@types.size)
+				return false unless rest_type === rest
 			else
-				return false if rest.any?
+				return false if value.size > len
 			end
 
 			true
@@ -29,22 +30,21 @@ module Empirical
 	class KeywordParamsType
 		def initialize(types: {}, rest: nil)
 			@types = types
-			@rest = rest
+			@rest_type = rest
 		end
 
 		def ===(value)
-			return false unless Hash === value
+			types = @types
 
-			init = value.take(@types.size).to_h
+			types.each do |key, type|
+				return false unless type === value[key]
+			end
 
-			return false unless _Map(**@types) === init
-
-			rest = value.drop(@types.size).to_h
-
-			if @rest
-				return false unless @rest === rest
+			if (rest_type = @rest_type)
+				rest = value.drop(types.size).to_h
+				return false unless rest_type === rest
 			else
-				return false if rest.any?
+				return false if value.size > types.size
 			end
 
 			true
