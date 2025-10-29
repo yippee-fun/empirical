@@ -62,6 +62,7 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 			positional_params_type_buffer = []
 			keyword_params_type_buffer = []
 			keyword_splat_type_buffer = []
+			owner_slice = "self"
 
 			overloading = @block_stack.any? { it.name == :overload }
 
@@ -72,6 +73,15 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 			# parameterful method defs (e.g. `fun foo(a: Type)` or `fun foo(a = Type)`)
 			in Prism::CallNode
 				raise SyntaxError if signature.block
+
+				case signature.receiver
+				when nil
+					"self"
+				when Prism::SelfNode
+					owner_slice = "self.singleton_class"
+				else
+					owner_slice = "#{signature.receiver.slice}.singleton_class"
+				end
 
 				signature.arguments&.arguments&.each do |argument|
 					case argument
@@ -197,8 +207,8 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 			pre_end_buffer << ")"
 
 			if overloading
-				post_end_buffer << "((::Empirical::OVERLOADED_METHODS[self] ||= {})[:#{method_name}] ||= []) << ::Empirical::Signature.new(method: instance_method(:#{method_name}), positional_params_type: ::Empirical::PositionalParamsType.new(types: [#{positional_params_type_buffer.join(', ')}], rest: #{positional_splat_type_buffer.first || 'nil'}), keyword_params_type: ::Empirical::KeywordParamsType.new(types: {#{keyword_params_type_buffer.join(', ')}}, rest: #{keyword_splat_type_buffer.first || 'nil'}))"
-				post_end_buffer << "::Empirical.generate_root_overloaded_method(self, :#{method_name})"
+				post_end_buffer << "((::Empirical::OVERLOADED_METHODS[#{owner_slice}] ||= {})[:#{method_name}] ||= []) << ::Empirical::Signature.new(method: #{owner_slice}.instance_method(:#{method_name}), positional_params_type: ::Empirical::PositionalParamsType.new(types: [#{positional_params_type_buffer.join(', ')}], rest: #{positional_splat_type_buffer.first || 'nil'}), keyword_params_type: ::Empirical::KeywordParamsType.new(types: {#{keyword_params_type_buffer.join(', ')}}, rest: #{keyword_splat_type_buffer.first || 'nil'}))"
+				post_end_buffer << "::Empirical.generate_root_overloaded_method(#{owner_slice}, :#{method_name})"
 			end
 
 			case return_type
