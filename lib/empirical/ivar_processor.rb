@@ -9,66 +9,6 @@ class Empirical::IvarProcessor < Empirical::BaseProcessor
 		new_context { super }
 	end
 
-	def visit_call_node(node)
-		return super unless node.receiver in Prism::InstanceVariableReadNode
-		return super unless node.call_operator_loc.slice == "::"
-		receiver_end = node.receiver.location.end_offset
-		operator_start = node.call_operator_loc.start_offset
-
-		# Ensure there is a space before the `::`
-		return super unless operator_start - receiver_end >= 1
-
-		operator_end = node.call_operator_loc.end_offset
-		message_start = node.message_loc.start_offset
-
-		# Ensure there is a space after the `::`
-		return super unless message_start - operator_end >= 1
-
-		@context << node.receiver.name
-
-		@annotations << [
-			(start = node.location.start_offset),
-			node.receiver.location.start_offset - start,
-			"(::Empirical::IVAR_TYPE[self] ||= {})[:",
-		]
-
-		@annotations << [
-			(start = node.receiver.location.end_offset),
-			node.message_loc.start_offset - start,
-			"] = ",
-		]
-	end
-
-	def visit_constant_path_node(node)
-		return super unless node.parent in Prism::InstanceVariableReadNode
-
-		receiver_end = node.parent.location.end_offset
-		operator_start = node.delimiter_loc.start_offset
-
-		# Ensure there is a space before the `::`
-		return super unless operator_start - receiver_end >= 1
-
-		operator_end = node.delimiter_loc.end_offset
-		name_start = node.name_loc.start_offset
-
-		# Ensure there is a space after the `::`
-		return super unless name_start - operator_end >= 1
-
-		@context << node.parent.name
-
-		@annotations << [
-			(start = node.location.start_offset),
-			node.parent.location.start_offset - start,
-			"(::Empirical::IVAR_TYPE[self] ||= {})[:",
-		]
-
-		@annotations << [
-			(start = node.parent.location.end_offset),
-			node.name_loc.start_offset - start,
-			"] = ",
-		]
-	end
-
 	def visit_instance_variable_write_node(node)
 		@annotations << [
 			node.name_loc.start_offset,

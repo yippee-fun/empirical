@@ -1,21 +1,7 @@
 # frozen_string_literal: true
 
 class User
-	@name :: String
-	@name / String
-	@name ~= String
-	@name = String
-	@name | String
-	@name |= String
-	@name => String
-
-	let @name => String
-	let @name => String
-
-	prop :name, String
-
-
-	attr_reader :name
+	prop :name, String, reader: :public
 
 	def good
 		@name = "Hello"
