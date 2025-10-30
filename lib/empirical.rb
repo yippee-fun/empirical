@@ -136,6 +136,9 @@ end
 
 Empirical::CLASS_METHOD = Object.instance_method(:class)
 Empirical::INSTANCE_VARIABLE_SET_METHOD = Object.instance_method(:instance_variable_set)
+Empirical::INSTANCE_VARIABLE_GET_METHOD = Object.instance_method(:instance_variable_get)
+Empirical::DEFINE_METHOD_METHOD = Module.instance_method(:define_method)
+Empirical::ATTR_READER_METHOD = Module.instance_method(:attr_reader)
 
 class BasicObject
 	def self.prop(name, type, reader: nil, writer: nil, predicate: nil)
@@ -143,32 +146,33 @@ class BasicObject
 		raise ArgumentError unless writer    in nil | :public | :protected | :private
 		raise ArgumentError unless predicate in nil | :public | :protected | :private
 
+		ivar = :"@#{name}"
+
 		(::Empirical::IVAR_TYPE[self] ||= {})[:"@#{name}"] = type
 
-		module_eval [
-			"# frozen_string_literal: true",
-			(
-				if reader
-					<<~RUBY
-						#{reader} def #{name} = @#{name}
-					RUBY
-				end
-			),
-			(
-				if writer
-					<<~RUBY
-						#{writer} def #{name}(value) = @#{name} = value
-					RUBY
-				end
-			),
-			(
-				if predicate
-					<<~RUBY
-						#{predicate} def #{name}? = !!@#{name}
-					RUBY
-				end
-			),
-		].compact!.join("\n\n")
+		if reader
+			::Empirical::ATTR_READER_METHOD.bind_call(self, name)
+
+			__send__ reader, name
+		end
+
+		if writer
+			writer_method_name = :"#{name}="
+
+			::Empirical::DEFINE_METHOD_METHOD.bind_call(self, writer_method_name) do |value|
+				::Empirical::SET_IVAR_METHOD.bind_call(self, ivar, value)
+			end
+
+			__send__ writer, writer_method_name
+		end
+
+		if predicate
+			predicate_method_name = :"#{name}?"
+
+			::Empirical::DEFINE_METHOD_METHOD.bind_call(self, predicate_method_name) do
+				!!::Empirical::INSTANCE_VARIABLE_GET_METHOD.bind_call(self, name)
+			end
+		end
 	end
 
 	def __set_ivar_method__(name, value)
