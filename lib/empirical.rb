@@ -30,6 +30,7 @@ module Empirical
 	EVERYTHING = ["**/*"].freeze
 	METHOD_METHOD = Module.instance_method(:method)
 	OVERLOADED_METHODS = ObjectSpace::WeakKeyMap.new
+	IVAR_TYPE = ObjectSpace::WeakKeyMap.new
 
 	TypeStore = Module.new
 
@@ -132,3 +133,51 @@ class Object
 		method_name
 	end
 end
+
+Empirical::CLASS_METHOD = Object.instance_method(:class)
+Empirical::INSTANCE_VARIABLE_SET_METHOD = Object.instance_method(:instance_variable_set)
+
+class BasicObject
+	def self.prop(name, type, reader: nil, writer: nil, predicate: nil)
+		raise ArgumentError unless reader    in nil | :public | :protected | :private
+		raise ArgumentError unless writer    in nil | :public | :protected | :private
+		raise ArgumentError unless predicate in nil | :public | :protected | :private
+
+		(::Empirical::IVAR_TYPE[self] ||= {})[:"@#{name}"] = type
+
+		module_eval [
+			"# frozen_string_literal: true",
+			(
+				if reader
+					<<~RUBY
+						#{reader} def #{name} = @#{name}
+					RUBY
+				end
+			),
+			(
+				if writer
+					<<~RUBY
+						#{writer} def #{name}(value) = @#{name} = value
+					RUBY
+				end
+			),
+			(
+				if predicate
+					<<~RUBY
+						#{predicate} def #{name}? = !!@#{name}
+					RUBY
+				end
+			),
+		].compact!.join("\n\n")
+	end
+
+	def __set_ivar_method__(name, value)
+		if (map = ::Empirical::IVAR_TYPE[::Empirical::CLASS_METHOD.bind_call(self)]) && !(map[name] === value)
+			raise ::TypeError
+		end
+
+		::Empirical::INSTANCE_VARIABLE_SET_METHOD.bind_call(self, name, value)
+	end
+end
+
+Empirical::SET_IVAR_METHOD = BasicObject.instance_method(:__set_ivar_method__)

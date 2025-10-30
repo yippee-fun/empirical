@@ -9,6 +9,26 @@ class Empirical::IvarProcessor < Empirical::BaseProcessor
 		new_context { super }
 	end
 
+	def visit_instance_variable_write_node(node)
+		@annotations << [
+			node.name_loc.start_offset,
+			0,
+			"::Empirical::SET_IVAR_METHOD.bind_call(self, :",
+		]
+
+		@annotations << [
+			(start = node.name_loc.end_offset),
+			node.value.location.start_offset - start,
+			", ",
+		]
+
+		@annotations << [
+			node.location.end_offset,
+			0,
+			")",
+		]
+	end
+
 	def visit_block_node(node)
 		new_context { super }
 	end

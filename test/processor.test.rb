@@ -25,7 +25,7 @@ test "defined" do
 	assert_equal_ruby processed, <<~RUBY
 		def foo
 			return #{guarded(:@foo)} if defined?(@foo)
-			@foo = 2
+			::Empirical::SET_IVAR_METHOD.bind_call(self, :@foo, 2)
 		end
 	RUBY
 end
