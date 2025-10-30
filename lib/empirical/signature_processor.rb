@@ -276,11 +276,6 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 		"::Empirical::TypeStore::#{as} = #{type}"
 	end
 
-	# Takes a signature as a string and converts it into a unique method identifier
-	private def unique_method_ident(signature)
-		"#{signature.tr('()', '_').gsub(/[^a-zA-Z0-9_]/, '')}__#{SecureRandom.alphanumeric(32)}"
-	end
-
 	def visit_return_node(node)
 		case @return_type
 		in nil
