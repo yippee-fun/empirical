@@ -114,7 +114,7 @@ module Empirical
 
 		owner.module_eval <<~RUBY
 			#{visibility} def #{method_name}(*args, **kwargs, &block)
-				::Empirical::OVERLOADED_METHODS[self.method(:#{method_name}).owner][:#{method_name}].each do |sig|
+				::Empirical::OVERLOADED_METHODS[self.method(:#{method_name}).owner][:#{method_name}].reverse_each do |sig|
 					if sig.positional_params_type === args && sig.keyword_params_type === kwargs
 						return sig.method.bind_call(self, *args, **kwargs, &block)
 					end
