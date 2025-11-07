@@ -64,6 +64,15 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 			keyword_splat_type_buffer = []
 			owner_slice = "self"
 
+			defaults = body_block.parameters&.parameters&.keywords&.to_h do |param|
+				case param
+				when Prism::OptionalKeywordParameterNode
+					[param.name.name, param.value]
+				else
+					raise "Hello"
+				end
+			end
+
 			overloading = @block_stack.any? { it.name == :overload }
 
 			case signature
@@ -111,7 +120,8 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 					# Positional (e.g. `a = Type` becomes `a = nil` or `a = default`)
 					in Prism::LocalVariableWriteNode[name: name, value: typed_param]
 						param_type_slice = typed_param.slice
-						default_string = "nil"
+
+						default_string = defaults[name.name]&.slice || "nil"
 
 						# replace the typed_param from the argument with the appropriate default value
 						@annotations << [
@@ -177,7 +187,7 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 									typed_param.slice
 								end
 
-								default_string = "nil"
+								default_string = defaults[name]&.slice || "nil"
 
 								# replace the typed_param from the argument with the appropriate default value
 								@annotations << [
@@ -236,7 +246,7 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 			# Remove the return type and `do` and replace with post_def_buffer
 			@annotations << [
 				(start = signature.location.end_offset),
-				body_block.opening_loc.end_offset - start,
+				(body_block.parameters&.location&.end_offset || body_block.opening_loc.end_offset) - start,
 				";#{post_def_buffer.join(';')};",
 			]
 
