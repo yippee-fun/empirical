@@ -71,7 +71,7 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 				else
 					raise "Hello"
 				end
-			end
+			end || {}
 
 			overloading = @block_stack.any? { it.name == :overload }
 
