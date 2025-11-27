@@ -1,15 +1,5 @@
 # frozen_string_literal: true
 
-# test do
-# 	processed = Empirical.process(<<~RUBY, with: Empirical::PROCESSORS)
-# 		fun example(name: String) => String do |name: "World"|
-
-# 		end
-# 	RUBY
-
-# 	puts processed
-# end
-
 test "optional keyword argument" do
 	mod = Module.new do
 		extend self
