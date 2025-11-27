@@ -165,11 +165,11 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 					argument.elements.each do |argument|
 						name = argument.key.unescaped
 
-						nilable = false
+						optional = false
 
 						if name.end_with?("?")
 							name = name[0..-2]
-							nilable = true
+							optional = true
 
 							@annotations << [
 								argument.key.location.end_offset - 2,
@@ -205,13 +205,13 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 							post_def_buffer << argument_type_check(name:, type: param_type_ident)
 						else
 
-							param_type_slice = if nilable
+							param_type_slice = if optional
 								"::Literal::_Nilable(#{typed_param.slice})"
 							else
 								typed_param.slice
 							end
 
-							default_string = defaults[name]&.slice
+							default_string = defaults[name]&.slice || (optional ? "nil" : nil)
 
 							# replace the typed_param from the argument with the appropriate default value
 							if default_string

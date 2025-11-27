@@ -4,7 +4,7 @@ test "optional keyword argument" do
 	mod = Module.new do
 		extend self
 
-		fun example(name: _Nilable(String)) => String do
+		fun example(name?: String) => String do
 			if name
 				"Hello #{name}"
 			else
