@@ -27,4 +27,20 @@ class Empirical::TypeError < ::TypeError
 			    Actual (#{value.class}): #{value.inspect}
 		MESSAGE
 	end
+
+  def self.attr_type_error(name:, value:, expected:, attr_type:, context:)
+		context_class = context.class
+		sign = context_class.singleton_class? ? "." : "#"
+
+		operation = (attr_type == "reader") ? "read from" : "written to"
+		method_name = "#{name}#{(attr_type == 'writer') ? '=' : ''}"
+
+		new(<<~MESSAGE)
+			Attribute #{name} #{operation} with the wrong type.
+
+			  #{context_class.name}#{sign}#{method_name}
+			    Expected: #{expected.inspect}
+			    Actual (#{value.class}): #{value.inspect}
+		MESSAGE
+	end
 end
