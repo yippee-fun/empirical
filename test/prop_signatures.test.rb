@@ -14,7 +14,7 @@ class User
 	end
 
 	def bad
-		@name = 1
+		@name = 1.to_i
 	end
 
 	def untyped
@@ -304,7 +304,8 @@ test "writes to a prop in its own class are checked inline" do
 
 	lines = processed.lines
 
-	assert lines[1].include?("prop :name, ::Empirical::TypeStore.store(")
+	assert lines[1].start_with?("\tprop :name, ::Empirical::StaticCheck.after(::Empirical::TypeStore.store(")
+	assert lines[1].include?(%[("a"), __FILE__, 4, "`@name` is assigned")])
 	refute lines[3].include?("__check_ivar__")
 	assert lines[3].include?("::Empirical::TypeStore::T_")
 	assert lines[4].include?("@other = ::Empirical.__check_ivar__(self, :@other, (\"b\"))")

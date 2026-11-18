@@ -42,7 +42,7 @@ test "typed return with an early return" do
 		private begin;def answer;__empirical_return__ = begin;
 			return (__empirical_return__ = ( 1);(::Kernel.raise(::Empirical::TypeError.return_type_error(value: __empirical_return__, expected: ::Empirical::TypeStore::T, method_name: :answer, context: self)) unless ::Empirical::TypeStore::T === __empirical_return__);__empirical_return__) if true
 			2
-		;end;::Kernel.raise(::Empirical::TypeError.return_type_error(value: __empirical_return__, expected: ::Empirical::TypeStore::T, method_name: :answer, context: self)) unless ::Empirical::TypeStore::T === __empirical_return__;__empirical_return__;end;::Empirical::TypeStore.store(:T, (Integer));::Empirical.__declare_fun_types__(__FILE__, __LINE__ - 3, :answer, {}, ::Empirical::TypeStore::T);end
+		;end;::Kernel.raise(::Empirical::TypeError.return_type_error(value: __empirical_return__, expected: ::Empirical::TypeStore::T, method_name: :answer, context: self)) unless ::Empirical::TypeStore::T === __empirical_return__;__empirical_return__;end;::Empirical::TypeStore.store(:T, (Integer));::Empirical::StaticCheck.value(::Empirical::TypeStore::T, (2), __FILE__, 3, "`answer` returns");::Empirical::StaticCheck.value(::Empirical::TypeStore::T, (1), __FILE__, 2, "`answer` returns");::Empirical.__declare_fun_types__(__FILE__, __LINE__ - 3, :answer, {}, ::Empirical::TypeStore::T);end
 	RUBY
 end
 

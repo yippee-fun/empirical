@@ -14,11 +14,18 @@ class Empirical::IvarProcessor < Empirical::BaseProcessor
 	def initialize(...)
 		super
 		@props = {}
+		@static_checks = []
 		@inline = false
 	end
 
 	def visit_class_node(node)
-		with_props(props_declared_in(node.body)) { new_context { super } }
+		declarations = prop_declarations_in(node.body)
+		props = declarations.to_h { |ivar, _type, ident| [ivar, "::Empirical::TypeStore::#{ident}"] }
+		static_checks = []
+
+		with_props(props, static_checks) { new_context { super } }
+
+		store_prop_types(declarations, static_checks)
 	end
 
 	def visit_module_node(node)
@@ -70,6 +77,7 @@ class Empirical::IvarProcessor < Empirical::BaseProcessor
 	end
 
 	def visit_instance_variable_write_node(node)
+		check_statically(node)
 		check_value(node.name, node.value)
 		visit(node.value)
 		@context << node.name
@@ -270,31 +278,69 @@ class Empirical::IvarProcessor < Empirical::BaseProcessor
 		@props[name] if @inline
 	end
 
-	# Finds `prop :name, Type` calls in a class body and stores each type so writes can check against it inline.
-	private def props_declared_in(body)
+	# Finds the `prop :name, Type` calls in a class body, as [ivar, type node, stored type name].
+	private def prop_declarations_in(body)
 		statements = (Prism::StatementsNode === body) ? body.body : []
 
-		statements.each_with_object({}) do |statement, props|
+		statements.filter_map do |statement|
 			next unless statement in Prism::CallNode[
 				name: :prop,
 				receiver: nil,
 				arguments: Prism::ArgumentsNode[arguments: [Prism::SymbolNode => name, type, *]]
 			]
 
-			ident = "T_#{site}_#{type.location.start_offset}"
-
-			wrap(type.location.start_offset, type.location.end_offset, "::Empirical::TypeStore.store(:#{ident}, (", "))")
-
-			props[:"@#{name.unescaped}"] = "::Empirical::TypeStore::#{ident}"
+			[:"@#{name.unescaped}", type, "T_#{site}_#{type.location.start_offset}"]
 		end
 	end
 
-	private def with_props(props)
+	# Stores each prop’s type so writes can check against it inline. The static checks found in the
+	# class run as the last prop is declared, once every type they mention has been stored.
+	private def store_prop_types(declarations, static_checks)
+		declarations.each_with_index do |(_ivar, type, ident), index|
+			location = type.location
+
+			if static_checks.any? && index == declarations.size - 1
+				wrap(location.start_offset, location.end_offset, "::Empirical::StaticCheck.after(", ") { #{static_checks.join(';')} }")
+			end
+
+			wrap(location.start_offset, location.end_offset, "::Empirical::TypeStore.store(:#{ident}, (", "))")
+		end
+	end
+
+	# A write whose value has a type that is known from the source: a literal, or another typed ivar.
+	private def check_statically(node)
+		name = node.name
+		value = node.value
+		expected = inline_type(name)
+
+		return unless expected
+
+		line = node.location.start_line
+
+		case value
+		in Empirical::LiteralNode
+			return if value.slice.include?("\n")
+
+			# `@a = 1, 2` is an array without brackets
+			source = (Prism::ArrayNode === value && value.opening_loc.nil?) ? "[#{value.slice}]" : value.slice
+
+			@static_checks << "::Empirical::StaticCheck.value(#{expected}, (#{source}), __FILE__, #{line}, #{"`#{name}` is assigned".inspect})"
+		in Prism::InstanceVariableReadNode if (actual = inline_type(value.name))
+			@static_checks << "::Empirical::StaticCheck.type(#{expected}, #{actual}, __FILE__, #{line}, #{"`#{name}` is assigned `#{value.name}`".inspect})"
+		else
+			# not known
+		end
+	end
+
+	private def with_props(props, static_checks = [])
 		original_props = @props
+		original_static_checks = @static_checks
 		@props = props
+		@static_checks = static_checks
 		with_inline(false) { yield }
 	ensure
 		@props = original_props
+		@static_checks = original_static_checks
 	end
 
 	private def with_inline(inline)

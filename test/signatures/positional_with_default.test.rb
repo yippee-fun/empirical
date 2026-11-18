@@ -22,7 +22,7 @@ test "a default of the wrong type raises when it is used" do
 	mod = Module.new do
 		extend self
 
-		fun example(count = Integer) => Integer do |count: "one"|
+		fun example(count = Integer) => Integer do |count: "one".itself|
 			count
 		end
 	end

@@ -21,6 +21,7 @@ class Empirical::FunGenerator
 		@checks = []
 		@stores = []
 		@parameter_types = []
+		@parameter_idents = {}
 		@return_local = "__empirical_return_#{fun.call.location.start_offset}__"
 		@receiver_local = "__empirical_receiver_#{fun.call.location.start_offset}__"
 		@return_check = nil
@@ -43,9 +44,18 @@ class Empirical::FunGenerator
 		)
 
 		insert(body.closing_loc.start_offset, ";#{body_closing};")
-		insert(body.closing_loc.end_offset, ";#{[*@stores, declaration].join(';')};end")
+		insert(body.closing_loc.end_offset, ";#{[*@stores, *static_checks, declaration].join(';')};end")
 
 		self
+	end
+
+	# Run after the types are stored, so mistakes visible in the source are reported when the file loads.
+	private def static_checks
+		Empirical::FunChecker.new(
+			@fun,
+			parameter_types: @parameter_idents,
+			return_type: (return_type if @fun.return_type.kind == :typed),
+		).statements
 	end
 
 	# Registers the types under the location `Method#source_location` will report for the `def`.
@@ -105,6 +115,7 @@ class Empirical::FunGenerator
 
 		ident = store(type, parameter.type_source)
 		@parameter_types << "#{name}: #{ident}"
+		@parameter_idents[name] = ident
 		value = RESERVED_WORDS.include?(name) ? "::Kernel.binding.local_variable_get(:#{name})" : name
 
 		@checks << "::Kernel.raise(::Empirical::TypeError.argument_type_error(name: :#{name}, value: #{value}, expected: #{ident}, method_name: :#{method_name}, context: self)) unless #{ident} === #{value}"

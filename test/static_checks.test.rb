@@ -1,0 +1,207 @@
+# frozen_string_literal: true
+
+def static_error(source)
+	Module.new.module_eval(source, File.join(Dir.pwd, "test/example.rb"), 1)
+	nil
+rescue Empirical::StaticTypeError => error
+	error.message.delete_prefix("#{Dir.pwd}/test/")
+end
+
+test "a literal return of the wrong type is reported when the method is defined" do
+	message = static_error(<<~RUBY)
+		fun answer => String do
+			1
+		end
+	RUBY
+
+	assert_equal message, "example.rb:2: `answer` returns 1, which doesn’t match String."
+end
+
+test "a literal return of the right type is fine" do
+	assert_equal static_error(<<~RUBY), nil
+		fun answer => _Nilable(String) do
+			return nil if rand > 2
+			"yes"
+		end
+	RUBY
+end
+
+test "an empty body returns nil" do
+	message = static_error(<<~RUBY)
+		fun answer => String do
+		end
+	RUBY
+
+	assert_equal message, "example.rb:1: `answer` returns nil, which doesn’t match String."
+end
+
+test "early returns" do
+	assert static_error("fun answer => String do\n\treturn 1 if rand > 2\n\t'a'\nend").include?("example.rb:2: `answer` returns 1")
+	assert static_error("fun answer => String do\n\treturn if rand > 2\n\t'a'\nend").include?("example.rb:2: `answer` returns nil")
+end
+
+test "both branches of a conditional" do
+	message = static_error(<<~RUBY)
+		fun answer(flag = _Boolean) => String do
+			if flag
+				"yes"
+			else
+				:no
+			end
+		end
+	RUBY
+
+	assert_equal message, "example.rb:5: `answer` returns :no, which doesn’t match String."
+end
+
+test "an if with no else doesn’t count the missing branch" do
+	assert_equal static_error(<<~RUBY), nil
+		fun answer(flag = _Boolean) => String do
+			raise "no" unless flag
+			"yes" if flag
+		end
+	RUBY
+end
+
+test "the value of a rescue clause" do
+	message = static_error(<<~RUBY)
+		fun answer => String do
+			"yes"
+		rescue
+			0
+		end
+	RUBY
+
+	assert_equal message, "example.rb:4: `answer` returns 0, which doesn’t match String."
+end
+
+test "literals are checked with the real type" do
+	assert_equal static_error("fun answer => _Integer(1..) do\n\t5\nend"), nil
+	assert static_error("fun answer => _Integer(1..) do\n\t0\nend").include?("`answer` returns 0, which doesn’t match")
+	assert static_error("fun answer => _Array(Integer) do\n\t[1, :two]\nend").include?("`answer` returns [1, :two]")
+	assert_equal static_error("String = Integer\nfun answer => String do\n\t1\nend"), nil
+end
+
+test "a return in a lambda isn’t the method’s return" do
+	assert_equal static_error(<<~RUBY), nil
+		fun answer => String do
+			-> { return 1 }.call.to_s
+		end
+	RUBY
+end
+
+test "a literal default of the wrong type" do
+	message = static_error(<<~RUBY)
+		fun repeat(text = String, count: Integer) => String do |count: "twice"|
+			text * count
+		end
+	RUBY
+
+	assert_equal message, %(example.rb:1: The default for `count` in `repeat` is "twice", which doesn’t match Integer.)
+end
+
+test "returning a parameter whose type can never match" do
+	message = static_error(<<~RUBY)
+		fun name_of(id = Integer) => String do
+			id
+		end
+	RUBY
+
+	assert_equal message, "example.rb:2: `name_of` returns `id`, which is declared as Integer and can never match String."
+end
+
+test "returning a parameter that is a subtype or might fit is fine" do
+	assert_equal static_error("fun a(x = Integer) => Numeric do\n\tx\nend"), nil
+	assert_equal static_error("fun a(x = Numeric) => Integer do\n\tx\nend"), nil
+	assert_equal static_error("fun a(x = Comparable) => String do\n\tx\nend"), nil
+	assert_equal static_error("fun a(x = _Nilable(String)) => String do\n\tx\nend"), nil
+	assert_equal static_error("fun a(x = _Predicate('even', &:even?)) => String do\n\tx\nend"), nil
+end
+
+test "unions, nilables and containers are compared by what they could contain" do
+	assert static_error("fun a(x = _Nilable(Integer)) => String do\n\tx\nend").include?("can never match String")
+	assert static_error("fun a(x = _Union(Integer, Float)) => _Nilable(String) do\n\tx\nend").include?("can never match")
+	assert static_error("fun a(xs = [Integer]) => String do\n\txs\nend").include?("declared as _Array(Integer)")
+	assert static_error("fun a(x = _Boolean) => Integer do\n\tx\nend").include?("can never match Integer")
+end
+
+test "a parameter that is reassigned or shadowed isn’t assumed to keep its type" do
+	assert_equal static_error("fun a(x = Integer) => String do\n\tx = x.to_s\n\tx\nend"), nil
+	assert_equal static_error("fun a(x = Integer) => String do\n\tx += 1 if false\n\tx\nend"), nil
+	assert_equal static_error("fun a(x = Integer) => String do\n\t[1].each { |x| return x.to_s }\n\tx\nend"), nil
+end
+
+test "a literal written to a typed ivar" do
+	message = static_error(<<~RUBY)
+		class Example
+			prop :name, String
+			prop :age, Integer
+
+			def reset
+				@age = 0
+				@name = :nobody
+			end
+		end
+	RUBY
+
+	assert_equal message, "example.rb:7: `@name` is assigned :nobody, which doesn’t match String."
+end
+
+test "one typed ivar written to another" do
+	message = static_error(<<~RUBY)
+		class Example
+			prop :name, String
+			prop :age, Integer
+
+			def confuse
+				@name = @age
+			end
+		end
+	RUBY
+
+	assert_equal message, "example.rb:6: `@name` is assigned `@age`, which is declared as Integer and can never match String."
+end
+
+test "ivar writes that aren’t known are left to the runtime check" do
+	assert_equal static_error(<<~RUBY), nil
+		class Example
+			prop :name, String
+			prop :count, Integer
+
+			def set(value) = @name = value
+			def self.class_level = @name = 1
+			def in_a_block = tap { @count = "many" }
+		end
+	RUBY
+end
+
+test "the class body still evaluates to its last expression" do
+	value = Module.new.module_eval(<<~RUBY)
+		class Example
+			def touch = @name = "a"
+			prop :name, String
+		end
+	RUBY
+
+	assert_equal value, :name
+end
+
+test "checks don’t change line numbers" do
+	source = <<~RUBY
+		class Example
+			prop :name, String
+
+			def touch = @name = "a"
+
+			fun answer(count = Integer) => Integer do |count: 1|
+				return 0 if count.zero?
+				count
+			end
+		end
+	RUBY
+
+	processed = Empirical.process(source, with: Empirical::PROCESSORS)
+
+	assert_equal processed.lines.size, source.lines.size
+	assert processed.lines[6].include?("return")
+end
