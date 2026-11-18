@@ -181,10 +181,10 @@ module Empirical
 		method_names
 	end
 
-	# For internal use only. Called after each `fun` is defined.
+	# For internal use only. Called after each `fun` is defined. Returns the name, as the `def` would.
 	def self.__declare_fun_types__(path, line, name, parameter_types, return_type)
 		FUN_TYPES[[path, line, name]] = FunTypes.new(parameter_types: parameter_types.freeze, return_type:)
-		nil
+		name
 	end
 
 	# The types a method was defined with, or nil if it wasn’t defined with `fun`.

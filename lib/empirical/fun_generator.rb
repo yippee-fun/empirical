@@ -29,7 +29,8 @@ class Empirical::FunGenerator
 		fun = @fun
 		body = fun.body
 
-		replace(fun.call.message_loc.start_offset, fun.call.message_loc.end_offset, "def")
+		# The `begin` keeps what follows the `def` under a modifier like `if`, and evaluates to the method name like a `def`.
+		replace(fun.call.message_loc.start_offset, fun.call.message_loc.end_offset, "begin;def")
 
 		fun.parameters.each { |parameter| rewrite(parameter) }
 
@@ -41,7 +42,7 @@ class Empirical::FunGenerator
 		)
 
 		insert(body.closing_loc.start_offset, ";#{body_closing};")
-		insert(body.closing_loc.end_offset, ";#{[*@stores, declaration].join(';')};")
+		insert(body.closing_loc.end_offset, ";#{[*@stores, declaration].join(';')};end")
 
 		self
 	end
