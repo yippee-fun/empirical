@@ -211,6 +211,149 @@ test "one typed ivar written to another" do
 	assert_equal message, "example.rb:6: `@name` is assigned `@age`, which is declared as Integer and can never match String."
 end
 
+test "returning a typed ivar whose type can never match" do
+	message = static_error(<<~RUBY)
+		class Example
+			prop :foo, Integer
+
+			fun answer => String do
+				@foo
+			end
+		end
+	RUBY
+
+	assert_equal message, "example.rb:5: `answer` returns `@foo`, which is declared as Integer and can never match String."
+end
+
+test "returning a typed ivar early" do
+	message = static_error(<<~RUBY)
+		class Example
+			prop :foo, Integer
+
+			fun answer => String do
+				return @foo if rand > 2
+				"ok"
+			end
+		end
+	RUBY
+
+	assert_equal message, "example.rb:5: `answer` returns `@foo`, which is declared as Integer and can never match String."
+end
+
+test "returning a typed ivar that fits is fine" do
+	assert_equal static_error(<<~RUBY), nil
+		class Example
+			prop :name, String
+			prop :count, _Nilable(Integer)
+			prop :anything, _Any
+
+			fun name => String do
+				@name
+			end
+
+			fun count => Integer do
+				@count
+			end
+
+			fun anything => String do
+				@anything
+			end
+		end
+	RUBY
+end
+
+test "a parameter written to a typed ivar" do
+	message = static_error(<<~RUBY)
+		class Example
+			prop :name, String
+
+			fun rename(id = Integer) => void do
+				@name = id
+			end
+		end
+	RUBY
+
+	assert_equal message, "example.rb:5: `@name` is assigned `id`, which is declared as Integer and can never match String."
+end
+
+test "literals and ivars written to typed ivars inside a fun" do
+	literal = static_error(<<~RUBY)
+		class Example
+			prop :name, String
+
+			fun reset => void do
+				@name = :nobody
+			end
+		end
+	RUBY
+
+	ivar = static_error(<<~RUBY)
+		class Example
+			prop :name, String
+			prop :age, Integer
+
+			fun confuse => void do
+				@name = @age
+			end
+		end
+	RUBY
+
+	assert_equal literal, "example.rb:5: `@name` is assigned :nobody, which doesn’t match String."
+	assert_equal ivar, "example.rb:6: `@name` is assigned `@age`, which is declared as Integer and can never match String."
+end
+
+test "ivars in a fun that aren’t known are left to the runtime check" do
+	assert_equal static_error(<<~RUBY), nil
+		class Example
+			fun before_the_prop => String do
+				@foo
+			end
+
+			prop :foo, Integer
+
+			fun self.class_level => String do
+				@foo
+			end
+
+			fun in_a_block(items = Array) => String do
+				items.each { return @foo }
+				"none"
+			end
+
+			fun reassigned(id = Integer) => void do
+				id = id.to_s
+				@name = id
+			end
+
+			prop :name, String
+		end
+	RUBY
+end
+
+test "writes to a prop inside a fun are checked inline" do
+	processed = Empirical.process(<<~RUBY, with: Empirical::IvarProcessor)
+		class Example
+			prop :name, String
+
+			fun rename(name = String) => void do
+				@name = name
+				tap { @name = name }
+			end
+
+			fun self.build => void do
+				@name = "class level"
+			end
+		end
+	RUBY
+
+	lines = processed.lines
+
+	refute lines[4].include?("__check_ivar__")
+	assert lines[4].include?("::Empirical::TypeStore::T_")
+	assert lines[5].include?("__check_ivar__")
+	assert lines[9].include?("__check_ivar__")
+end
+
 test "ivar writes that aren’t known are left to the runtime check" do
 	assert_equal static_error(<<~RUBY), nil
 		class Example

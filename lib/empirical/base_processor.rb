@@ -23,6 +23,59 @@ class Empirical::BaseProcessor < Prism::Visitor
 		)
 	end
 
+	private def fun?(node)
+		node.name == :fun && node.receiver.nil? && (node.arguments || node.block)
+	end
+
+	# The `fun` call a call defines, when it has the block: itself, or the one it wraps.
+	# In `private fun foo => Type do ... end`, Ruby attaches the block to `private`, not to `fun`.
+	private def fun_defined_by(node)
+		return node if fun?(node)
+
+		wrapped_fun(node)&.first
+	end
+
+	private def wrapped_fun(outer)
+		wrappers = [outer]
+		current = outer
+
+		loop do
+			case current.arguments&.arguments
+			in [Prism::CallNode => current]
+				return [current, wrappers] if fun?(current)
+				return if current.block
+				wrappers << current
+			else
+				return
+			end
+		end
+	end
+
+	# False for `fun self.name` and `fun object.name`, which define singleton methods.
+	private def instance_method_fun?(fun)
+		case fun.arguments&.arguments
+		in [Prism::KeywordHashNode[elements: [Prism::AssocNode[key: Prism::CallNode[receiver: Prism::Node]]]]]
+			false
+		else
+			true
+		end
+	end
+
+	# Finds the `prop :name, Type` calls in a class body, as [ivar, type node, stored type name].
+	private def prop_declarations_in(body)
+		statements = (Prism::StatementsNode === body) ? body.body : []
+
+		statements.filter_map do |statement|
+			next unless statement in Prism::CallNode[
+				name: :prop,
+				receiver: nil,
+				arguments: Prism::ArgumentsNode[arguments: [Prism::SymbolNode => name, type, *]]
+			]
+
+			[:"@#{name.unescaped}", type, "T_#{site}_#{type.location.start_offset}"]
+		end
+	end
+
 	# Identifies this file in the names of stored types, so the same source always generates the same code.
 	private def site
 		@site ||= Digest::SHA256.hexdigest(@path || @source)[0, 12]

@@ -16,6 +16,7 @@ class Empirical::IvarProcessor < Empirical::BaseProcessor
 		@props = {}
 		@static_checks = []
 		@inline = false
+		@fun_bodies = {}.compare_by_identity
 	end
 
 	def visit_class_node(node)
@@ -40,8 +41,9 @@ class Empirical::IvarProcessor < Empirical::BaseProcessor
 		with_inline(node.receiver.nil?) { new_context { super } }
 	end
 
+	# The body of a `fun` is a method body, like a `def`. Any other block might run with a different `self`.
 	def visit_block_node(node)
-		with_inline(false) { new_context { super } }
+		with_inline(@fun_bodies.fetch(node, false)) { new_context { super } }
 	end
 
 	def visit_lambda_node(node)
@@ -221,6 +223,10 @@ class Empirical::IvarProcessor < Empirical::BaseProcessor
 			wrap(node.location.start_offset, node.location.end_offset, "::Empirical.__check_writers__(self, (", "))")
 		end
 
+		if Prism::BlockNode === node.block && (fun = fun_defined_by(node))
+			@fun_bodies[node.block] = instance_method_fun?(fun)
+		end
+
 		return super unless node.safe_navigation?
 
 		visit(node.receiver)
@@ -276,21 +282,6 @@ class Empirical::IvarProcessor < Empirical::BaseProcessor
 
 	private def inline_type(name)
 		@props[name] if @inline
-	end
-
-	# Finds the `prop :name, Type` calls in a class body, as [ivar, type node, stored type name].
-	private def prop_declarations_in(body)
-		statements = (Prism::StatementsNode === body) ? body.body : []
-
-		statements.filter_map do |statement|
-			next unless statement in Prism::CallNode[
-				name: :prop,
-				receiver: nil,
-				arguments: Prism::ArgumentsNode[arguments: [Prism::SymbolNode => name, type, *]]
-			]
-
-			[:"@#{name.unescaped}", type, "T_#{site}_#{type.location.start_offset}"]
-		end
 	end
 
 	# Stores each prop’s type so writes can check against it inline. The static checks found in the

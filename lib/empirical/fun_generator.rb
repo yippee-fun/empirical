@@ -13,10 +13,11 @@ class Empirical::FunGenerator
 	# with a local. return_check is the statement that checks it, for methods with a typed return.
 	attr_reader :annotations, :return_local, :return_check
 
-	def initialize(fun, source:, site:)
+	def initialize(fun, source:, site:, ivar_types: {})
 		@fun = fun
 		@source = source
 		@site = site
+		@ivar_types = ivar_types
 		@annotations = []
 		@checks = []
 		@stores = []
@@ -55,6 +56,7 @@ class Empirical::FunGenerator
 			@fun,
 			parameter_types: @parameter_idents,
 			return_type: (return_type if @fun.return_type.kind == :typed),
+			ivar_types: @ivar_types,
 		).statements
 	end
 

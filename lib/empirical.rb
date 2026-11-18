@@ -52,6 +52,13 @@ module Empirical
 			remove_const(name) if const_defined?(name, false)
 			const_set(name, type)
 		end
+
+		MISSING = Object.new.freeze
+
+		# For a type that may not have been stored yet.
+		def self.lookup(name)
+			const_defined?(name, false) ? const_get(name, false) : MISSING
+		end
 	end
 
 	CONFIG = Configuration.new

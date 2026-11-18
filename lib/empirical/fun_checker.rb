@@ -1,21 +1,29 @@
 # frozen_string_literal: true
 
-# Finds values in a fun whose type is known from the source alone and that flow into one of its
-# declared types: literal defaults, and literals or untouched parameters that are returned. It
-# produces statements that check them once, when the method is defined.
+# Finds values in a fun whose type is known from the source alone and that flow into a declared
+# type. The known values are literals, parameters the body never reassigns, and ivars with a prop in
+# the same class. The declared types are the return type, parameter types (for defaults) and those
+# props. It produces statements that check them once, when the method is defined.
 class Empirical::FunChecker
 	NEW_RETURN_SCOPES = Set[:lambda, :define_method, :define_singleton_method].freeze
 
-	def initialize(fun, parameter_types:, return_type:)
+	# parameter_types and ivar_types map names to source that evaluates to the type.
+	def initialize(fun, parameter_types:, return_type:, ivar_types: {})
 		@fun = fun
+		@body = fun.body.body
 		@parameter_types = parameter_types
 		@return_type = return_type
+		@ivar_types = ivar_types
 		@method_name = fun.signature.name
+
+		# Values returned from inside a block, where `self` might not be this object.
+		@returned_in_block = Set[].compare_by_identity
+		@block_depth = 0
 	end
 
 	#: () -> Array[String]
 	def statements
-		[*default_checks, *return_checks]
+		[*default_checks, *return_checks, *ivar_write_checks]
 	end
 
 	private def default_checks
@@ -30,10 +38,7 @@ class Empirical::FunChecker
 	private def return_checks
 		return [] unless @return_type
 
-		body = @fun.body.body
-		known = known_parameters(body)
-
-		[*tails(body), *explicit_returns(body)].filter_map do |node|
+		[*tails(@body), *explicit_returns(@body)].filter_map do |node|
 			case node
 			in nil
 				value_check(@return_type, "nil", @fun.body, "`#{@method_name}` returns")
@@ -41,16 +46,42 @@ class Empirical::FunChecker
 				value_check(@return_type, "nil", node, "`#{@method_name}` returns")
 			in Empirical::LiteralNode
 				value_check(@return_type, node.slice, node, "`#{@method_name}` returns") unless node.slice.include?("\n")
-			in Prism::LocalVariableReadNode[name:] if known.key?(name)
-				"::Empirical::StaticCheck.type(#{@return_type}, #{known[name]}, __FILE__, #{node.location.start_line}, #{"`#{@method_name}` returns `#{name}`".inspect})"
 			else
-				nil
+				type = declared_type(node, in_block: @returned_in_block.include?(node))
+				type_check(@return_type, type, node, "`#{@method_name}` returns `#{node.slice}`") if type
 			end
+		end
+	end
+
+	# A parameter written straight to a typed ivar. Literals and other ivars written to one are
+	# checked by the IvarProcessor, which sees every method in the class.
+	private def ivar_write_checks
+		ivar_writes(@body).filter_map do |write|
+			expected = @ivar_types[write.name]
+			actual = declared_type(write.value, in_block: false) if Prism::LocalVariableReadNode === write.value
+
+			type_check(expected, actual, write, "`#{write.name}` is assigned `#{write.value.slice}`") if expected && actual
+		end
+	end
+
+	# The declared type of an expression, when it is a parameter or an ivar that must still hold it.
+	private def declared_type(node, in_block:)
+		case node
+		in Prism::LocalVariableReadNode[name:]
+			known_parameters[name]
+		in Prism::InstanceVariableReadNode[name:] unless in_block
+			@ivar_types[name]
+		else
+			nil
 		end
 	end
 
 	private def value_check(type, source, node, description)
 		"::Empirical::StaticCheck.value(#{type}, (#{source}), __FILE__, #{node.location.start_line}, #{description.inspect})"
+	end
+
+	private def type_check(expected, actual, node, description)
+		"::Empirical::StaticCheck.type(#{expected}, #{actual}, __FILE__, #{node.location.start_line}, #{description.inspect})"
 	end
 
 	private def literal_source?(source)
@@ -99,6 +130,10 @@ class Empirical::FunChecker
 		in Prism::CallNode[name:, block: Prism::BlockNode] if NEW_RETURN_SCOPES.include?(name)
 			explicit_returns(node.receiver, found)
 			explicit_returns(node.arguments, found)
+		in Prism::BlockNode
+			@block_depth += 1
+			node.compact_child_nodes.each { |child| explicit_returns(child, found) }
+			@block_depth -= 1
 		in Prism::ReturnNode
 			case node.arguments&.arguments
 			in nil
@@ -107,9 +142,27 @@ class Empirical::FunChecker
 				# returns an array
 			in [value]
 				found << value
+				@returned_in_block << value if @block_depth > 0
 			end
 		else
 			node.compact_child_nodes.each { |child| explicit_returns(child, found) }
+		end
+
+		found
+	end
+
+	# Writes to an ivar that run as this method, on this object: not in a block or a nested definition.
+	private def ivar_writes(node, found = [])
+		case node
+		in nil | Prism::BlockNode | Prism::DefNode | Prism::LambdaNode | Prism::DefinedNode
+			# somewhere else, or never evaluated
+		in Prism::ClassNode | Prism::ModuleNode | Prism::SingletonClassNode
+			# a different `self`
+		in Prism::InstanceVariableWriteNode
+			found << node
+			ivar_writes(node.value, found)
+		else
+			node.compact_child_nodes.each { |child| ivar_writes(child, found) }
 		end
 
 		found
@@ -131,11 +184,13 @@ class Empirical::FunChecker
 	end
 
 	# Typed parameters that the body never assigns to or shadows, so they still hold what was passed.
-	private def known_parameters(body)
-		reassigned = Set[]
-		collect_local_writes(body, reassigned)
+	private def known_parameters
+		@known_parameters ||= begin
+			reassigned = Set[]
+			collect_local_writes(@body, reassigned)
 
-		@parameter_types.except(*reassigned)
+			@parameter_types.except(*reassigned)
+		end
 	end
 
 	private def collect_local_writes(node, names)

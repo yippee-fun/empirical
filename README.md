@@ -322,7 +322,8 @@ It checks a value whose type it can know from the source, wherever that value me
 | A literal default in the block parameters | The parameter’s type |
 | A literal written to an ivar in an instance method | The `prop` in the same class |
 | A parameter that is returned and never reassigned | The return type |
-| A typed ivar written to another typed ivar | The `prop` in the same class |
+| A typed ivar that is returned | The return type |
+| A parameter or a typed ivar written to a typed ivar | The `prop` in the same class |
 
 Literals are checked with the real type, so this works for any type, such as `_Integer(1..)` or one of your own.
 
@@ -333,6 +334,19 @@ fun name_of(id = Integer) => String do
   id
 end
 # app/user.rb:2: `name_of` returns `id`, which is declared as Integer and can never match String.
+```
+
+Ivars are checked the same way, because every ivar has a declared type:
+
+```ruby
+class Counter
+  prop :count, Integer
+
+  fun label => String do
+    @count
+  end
+end
+# app/counter.rb:5: `label` returns `@count`, which is declared as Integer and can never match String.
 ```
 
 Anything Empirical can’t be sure about is left to the runtime checks.
