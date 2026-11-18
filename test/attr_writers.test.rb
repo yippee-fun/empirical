@@ -3,6 +3,7 @@
 class Account
 	prop :name, String
 	prop :age, Integer
+	prop :notes, _Any
 
 	attr_writer :name
 	attr_accessor :age, :notes
@@ -43,11 +44,21 @@ test "attr_accessor on a typed ivar is checked and still reads" do
 	end
 end
 
-test "untyped attributes are unaffected" do
+test "an attribute declared as _Any takes anything" do
 	account = Account.new
 	account.notes = [1, "two"]
 
 	assert_equal account.notes, [1, "two"]
+end
+
+test "a writer for an undeclared ivar raises when it’s called" do
+	klass = Class.new do
+		attr_writer :undeclared
+	end
+
+	assert_raises Empirical::UndeclaredInstanceVariableError do
+		klass.new.undeclared = 1
+	end
 end
 
 test "a writer returns the assigned value" do

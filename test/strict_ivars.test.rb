@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class Example
+	prop :bar, String
+
 	def initialize
 		@bar = "bar"
 	end
@@ -21,6 +23,8 @@ class Example
 end
 
 class BasicObjectExample < BasicObject
+	prop :bar, ::String
+
 	def initialize
 		@bar = "bar"
 	end

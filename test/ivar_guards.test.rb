@@ -146,6 +146,8 @@ end
 
 test "eval of an ivar nests the guard inside the eval wrapper" do
 	object = Class.new do
+		prop :code, String
+
 		def initialize = @code = "1 + 1"
 		def call = eval(@code)
 	end

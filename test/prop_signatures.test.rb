@@ -5,6 +5,9 @@ class User
 	prop :admin, _Boolean, predicate: :public
 	prop :secret, String, reader: :private, predicate: :private
 	prop :tags, _Array(String)
+	prop :pair, Array
+	prop :list, Array
+	prop :number, Integer
 
 	def good
 		@name = "Hello"
@@ -76,8 +79,81 @@ test "instance variable writes" do
 	assert_equal user.name, "Hello"
 end
 
-test "untyped ivars in a class with props" do
-	assert_equal User.new.untyped, 1
+test "writing an undeclared ivar raises" do
+	error = assert_raises Empirical::UndeclaredInstanceVariableError do
+		User.new.untyped
+	end
+
+	assert error.message.include?("Undeclared instance variable `@other` on an instance of")
+	assert error.message.include?("Declare it with `prop :other, Type`.")
+end
+
+test "writing an undeclared ivar raises in a class with no props" do
+	klass = Class.new do
+		def initialize = @name = "Joel"
+	end
+
+	assert_raises Empirical::UndeclaredInstanceVariableError do
+		klass.new
+	end
+end
+
+test "objects that override #class are still checked against their real class" do
+	klass = Class.new do
+		prop :name, String
+
+		def class = Integer
+		def set(value) = tap { @name = value }
+	end
+
+	assert_equal klass.new.set("Joel").instance_variable_get(:@name), "Joel"
+
+	assert_raises Empirical::TypeError do
+		klass.new.set(1)
+	end
+end
+
+test "modules declare the ivars they write" do
+	mod = Module.new do
+		prop :count, Integer
+
+		def increment = @count = (defined?(@count) ? @count : 0) + 1
+	end
+
+	klass = Class.new { include mod }
+
+	assert_equal klass.new.increment, 1
+end
+
+test "class-level ivars are declared on the singleton class" do
+	klass = Class.new do
+		class << self
+			prop :registry, Hash
+		end
+
+		@registry = {}
+
+		def self.register(key) = @registry[key] = true
+		def self.undeclared = @other = 1
+		def self.wrong = @registry = []
+	end
+
+	subclass = Class.new(klass) do
+		@registry = { inherited: true }
+	end
+
+	assert_equal klass.register(:a), true
+	assert_equal subclass.instance_variable_get(:@registry), { inherited: true }
+
+	error = assert_raises Empirical::UndeclaredInstanceVariableError do
+		klass.undeclared
+	end
+
+	assert error.message.include?("Declare it with `class << self; prop :other, Type; end`.")
+
+	assert_raises Empirical::TypeError do
+		klass.wrong
+	end
 end
 
 test "generated writer/reader" do

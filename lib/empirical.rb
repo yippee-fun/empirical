@@ -5,6 +5,7 @@ require "literal"
 require "empirical/version"
 require "empirical/name_error"
 require "empirical/type_error"
+require "empirical/undeclared_instance_variable_error"
 require "empirical/base_processor"
 require "empirical/ivar_processor"
 require "empirical/eval_processor"
@@ -30,7 +31,6 @@ module Empirical
 	METHOD_METHOD = Module.instance_method(:method)
 	IVAR_TYPE = ObjectSpace::WeakKeyMap.new
 	INHERITED_IVAR_TYPES = ObjectSpace::WeakKeyMap.new
-	TYPED_IVAR_NAMES = {}
 
 	module TypeStore
 		# Redefining replaces the type, so reloading a file doesn’t warn or leak.
@@ -125,20 +125,26 @@ module Empirical
 		end
 
 		(IVAR_TYPE[owner] ||= {})[ivar] = type
-		TYPED_IVAR_NAMES[ivar] = true
 		INHERITED_IVAR_TYPES.clear
 	end
 
-	# For internal use only. Returns the value, or raises if the ivar has a type and the value doesn’t match.
+	# For internal use only. Returns the value, or raises if the ivar isn’t declared or the value doesn’t match its type.
 	def self.__check_ivar__(object, name, value)
-		# Most ivars have no type on any class, and looking up the object’s class is the slow part.
-		return value unless TYPED_IVAR_NAMES.key?(name)
-
-		types = ivar_types_for(CLASS_METHOD.bind_call(object))
-
-		if types.key?(name) && !(types[name] === value)
-			raise TypeError.ivar_type_error(name:, value:, expected: types[name], context: object)
+		# `object.class` is several times faster than binding Kernel#class, but it can be overridden,
+		# so it’s only trusted to accept a write. Anything else is checked again against the real class.
+		if Object === object
+			types = INHERITED_IVAR_TYPES[object.class]
+			return value if types&.key?(name) && types[name] === value
 		end
+
+		# The ivars of a class or module itself are declared on its singleton class.
+		owner = (Module === object) ? SINGLETON_CLASS_METHOD.bind_call(object) : CLASS_METHOD.bind_call(object)
+
+		type = ivar_types_for(owner).fetch(name) do
+			raise UndeclaredInstanceVariableError.new(object, name)
+		end
+
+		raise TypeError.ivar_type_error(name:, value:, expected: type, context: object) unless type === value
 
 		value
 	end
@@ -185,6 +191,7 @@ class Object
 end
 
 Empirical::CLASS_METHOD = Object.instance_method(:class)
+Empirical::SINGLETON_CLASS_METHOD = Object.instance_method(:singleton_class)
 Empirical::INSTANCE_VARIABLE_SET_METHOD = Object.instance_method(:instance_variable_set)
 Empirical::INSTANCE_VARIABLE_GET_METHOD = Object.instance_method(:instance_variable_get)
 Empirical::DEFINE_METHOD_METHOD = Module.instance_method(:define_method)
@@ -196,8 +203,8 @@ Empirical::PUBLIC_METHOD = Module.instance_method(:public)
 Empirical::PROTECTED_METHOD = Module.instance_method(:protected)
 Empirical::PRIVATE_METHOD = Module.instance_method(:private)
 
-class BasicObject
-	def self.prop(name, type, reader: nil, writer: nil, predicate: nil)
+class Module
+	def prop(name, type, reader: nil, writer: nil, predicate: nil)
 		raise ArgumentError unless reader    in nil | :public | :protected | :private
 		raise ArgumentError unless writer    in nil | :public | :protected | :private
 		raise ArgumentError unless predicate in nil | :public | :protected | :private

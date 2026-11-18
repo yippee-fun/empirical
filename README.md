@@ -21,7 +21,7 @@ It gives you three things in the files you opt in:
 
 1. [Typed methods](#typed-methods) with `fun`.
 2. [Strict instance variables](#strict-instance-variables): reading an undefined ivar raises instead of returning `nil`.
-3. [Typed instance variables](#typed-instance-variables) with `prop`.
+3. [Typed instance variables](#typed-instance-variables): every ivar you write is declared with `prop` and checked.
 
 Types are [Literal](https://literal.fun) types. Anything that responds to `===` works: classes, ranges, procs, and Literal’s generics like `_Array(String)` or `_Nilable(Integer)`.
 
@@ -166,7 +166,7 @@ end
 
 ## Typed instance variables
 
-`prop` gives an instance variable a type. Every write to it is checked, wherever it happens: in the class, in a subclass, or through a generated writer.
+Every instance variable your code writes must be declared with `prop`, which gives it a type. Every write is checked, wherever it happens: in the class, in a subclass, or through a writer.
 
 ```ruby
 class User
@@ -183,6 +183,36 @@ User.new(1) # Empirical::TypeError: Instance variable @name assigned the wrong t
 ```
 
 `reader:`, `writer:` and `predicate:` each take `:public`, `:protected` or `:private`.
+
+Writing an ivar that hasn’t been declared raises an `Empirical::UndeclaredInstanceVariableError`, which also catches typos.
+
+```ruby
+def rename(name)
+  @nmae = name # Undeclared instance variable `@nmae` on an instance of User. Declare it with `prop :nmae, Type`.
+end
+```
+
+This applies to your code, in the files you include. Libraries can still set whatever ivars they like on your objects.
+
+If you don’t want to constrain an ivar, declare it as `_Any`.
+
+```ruby
+prop :cache, _Any
+```
+
+Modules declare the ivars they write in the same way. A subclass inherits its parent’s props and can’t change their types.
+
+Ivars on a class or module itself are declared on its singleton class.
+
+```ruby
+class Registry
+  class << self
+    prop :entries, Hash
+  end
+
+  @entries = {}
+end
+```
 
 `attr_writer` and `attr_accessor` are checked too, so you can keep using them alongside `prop`.
 
