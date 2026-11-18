@@ -36,6 +36,13 @@ module Empirical
 	CLOSED_MODULE_NAMES = {}
 	CLOSED_MUTEX = Mutex.new
 
+	# Keyed by [path, line, name], which identifies a method definition through `source_location` and `original_name`.
+	FUN_TYPES = {}
+	FunTypes = Data.define(:parameter_types, :return_type)
+
+	# The return type of an `itself` method, which depends on the receiver.
+	module Itself; end
+
 	module TypeStore
 		# Redefining replaces the type, so reloading a file doesn’t warn or leak.
 		def self.store(name, type)
@@ -183,6 +190,18 @@ module Empirical
 		method_names
 	end
 
+	# For internal use only. Called after each `fun` is defined. Returns the name, as the `def` would.
+	def self.__declare_fun_types__(path, line, name, parameter_types, return_type)
+		FUN_TYPES[[path, line, name]] = FunTypes.new(parameter_types: parameter_types.freeze, return_type:)
+		name
+	end
+
+	# The types a method was defined with, or nil if it wasn’t defined with `fun`.
+	def self.fun_types(method)
+		path, line = method.source_location
+		FUN_TYPES[[path, line, method.original_name]]
+	end
+
 	# For internal use only. Called at the end of every class and module body in an included file.
 	def self.__closed__(owner, path = nil, line = nil)
 		hook = CLOSED_MUTEX.synchronize do
@@ -239,6 +258,21 @@ end
 class Object
 	include Literal::Types
 end
+
+module Empirical::MethodTypes
+	# The types of the typed parameters by name, or nil if the method wasn’t defined with `fun`.
+	def parameter_types
+		::Empirical.fun_types(self)&.parameter_types
+	end
+
+	# The return type, or nil if the method wasn’t defined with `fun`.
+	def return_type
+		::Empirical.fun_types(self)&.return_type
+	end
+end
+
+Method.include(Empirical::MethodTypes)
+UnboundMethod.include(Empirical::MethodTypes)
 
 Empirical::CLASS_METHOD = Object.instance_method(:class)
 Empirical::SINGLETON_CLASS_METHOD = Object.instance_method(:singleton_class)
