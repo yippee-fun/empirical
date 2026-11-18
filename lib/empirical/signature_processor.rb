@@ -62,7 +62,7 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 			else
 				@annotations << [keyword_end, 0, " ::Kernel.raise(::Empirical::NeverError.new)"]
 			end
-		in { kind: :typed, return_local:, return_check: }
+		in { kind: :typed | :itself, return_local:, return_check: }
 			check = ";(#{return_check});#{return_local})"
 
 			case arguments

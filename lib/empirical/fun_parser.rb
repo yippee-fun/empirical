@@ -158,6 +158,8 @@ class Empirical::FunParser
 			:void
 		in Prism::LocalVariableReadNode[name: :never] | Prism::CallNode[name: :never, receiver: nil, arguments: nil, block: nil]
 			:never
+		in Prism::LocalVariableReadNode[name: :itself] | Prism::CallNode[name: :itself, receiver: nil, arguments: nil, block: nil]
+			:itself
 		else
 			:typed
 		end

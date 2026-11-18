@@ -202,6 +202,7 @@ Empirical::PROTECTED_METHOD_DEFINED_METHOD = Module.instance_method(:protected_m
 Empirical::PUBLIC_METHOD = Module.instance_method(:public)
 Empirical::PROTECTED_METHOD = Module.instance_method(:protected)
 Empirical::PRIVATE_METHOD = Module.instance_method(:private)
+Empirical::EQUAL_METHOD = BasicObject.instance_method(:equal?)
 
 class Module
 	def prop(name, type, reader: nil, writer: nil, predicate: nil)

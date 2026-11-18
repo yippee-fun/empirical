@@ -22,6 +22,16 @@ class Empirical::TypeError < ::TypeError
 		MESSAGE
 	end
 
+	def self.itself_return_error(value:, method_name:, context:)
+		new(<<~MESSAGE)
+			Method #{method_name} returned a different object instead of itself.
+
+			  #{describe(context, method_name)}
+			    Expected: #{describe_value(context)}
+			    Actual (#{class_of(value)}): #{describe_value(value)}
+		MESSAGE
+	end
+
 	def self.ivar_type_error(name:, value:, expected:, context:)
 		new(<<~MESSAGE)
 			Instance variable #{name} assigned the wrong type.
