@@ -61,6 +61,8 @@ class Empirical::FunGenerator
 			"::Literal::Types._Void"
 		in :never
 			"::Literal::Types._Never"
+		in :itself
+			"::Empirical::Itself"
 		in :typed
 			store(@fun.return_type.node, @fun.return_type.source)
 		end

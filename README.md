@@ -159,7 +159,7 @@ method(:create).parameter_types # => { name: String, tags: _Array(Symbol), admin
 method(:create).return_type     # => User
 ```
 
-A `void` method’s return type is `_Void`, and a `never` method’s is `_Never`.
+A `void` method’s return type is `_Void`, a `never` method’s is `_Never`, and an `itself` method’s is `Empirical::Itself`.
 
 ### What `fun` can’t do
 

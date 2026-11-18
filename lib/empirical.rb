@@ -36,6 +36,9 @@ module Empirical
 	FUN_TYPES = {}
 	FunTypes = Data.define(:parameter_types, :return_type)
 
+	# The return type of an `itself` method, which depends on the receiver.
+	module Itself; end
+
 	module TypeStore
 		# Redefining replaces the type, so reloading a file doesn’t warn or leak.
 		def self.store(name, type)

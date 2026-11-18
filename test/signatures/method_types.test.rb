@@ -34,6 +34,16 @@ test "unbound methods" do
 	assert_equal method.return_type, String
 end
 
+test "itself" do
+	klass = Class.new do
+		fun example => itself do
+			self
+		end
+	end
+
+	assert_equal klass.instance_method(:example).return_type, Empirical::Itself
+end
+
 test "void and never" do
 	mod = Module.new do
 		extend self
