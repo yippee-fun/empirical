@@ -59,6 +59,18 @@ class User
 	end
 end
 
+class Swapper
+	prop :first, String
+	prop :second, String
+
+	def call
+		kept = (@first = "a")
+		@second = "b"
+		@first, @second = @second, kept
+		[kept, @first, @second]
+	end
+end
+
 class SubUser < User
 	def bad_in_subclass
 		@name = 1
@@ -259,6 +271,23 @@ test "writes keep their value" do
 	assert_equal user.splat([1, 2]), [1, 2]
 	assert_equal user.rescue_modifier, 0
 	assert_equal user.command_call, 1
+end
+
+test "inline checks don’t share a temporary" do
+	assert_equal Swapper.new.call, ["a", "b", "a"]
+
+	processed = Empirical.process(<<~RUBY, with: Empirical::IvarProcessor)
+		class Example
+			prop :name, String
+
+			def call
+				@name = "a"
+				@name = "b"
+			end
+		end
+	RUBY
+
+	assert_equal processed.scan(/__empirical_ivar_\d+__ = /).uniq.size, 2
 end
 
 test "writes to a prop in its own class are checked inline" do

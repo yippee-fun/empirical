@@ -9,8 +9,6 @@
 # Writes: when the ivar has a `prop` in the same class body and the write is directly in an instance
 # method, the check is inlined. Every other write is checked at runtime by `Empirical.__check_ivar__`.
 class Empirical::IvarProcessor < Empirical::BaseProcessor
-	VALUE_LOCAL = "__empirical_ivar__"
-	MULTI_WRITE_LOCAL = "__empirical_multi_write__"
 	WRITER_MACROS = Set[:attr_writer, :attr_accessor].freeze
 
 	def initialize(...)
@@ -93,9 +91,10 @@ class Empirical::IvarProcessor < Empirical::BaseProcessor
 		name = node.name
 		operator = node.binary_operator_loc
 		value = node.value.location
+		opening, closing = check(name, value.start_offset)
 
-		@annotations << [operator.start_offset, operator.length, "= #{check_opening(name)}#{name} #{node.binary_operator} "]
-		wrap(value.start_offset, value.end_offset, "(", ")#{check_closing(name)}")
+		@annotations << [operator.start_offset, operator.length, "= #{opening}#{name} #{node.binary_operator} "]
+		wrap(value.start_offset, value.end_offset, "(", ")#{closing}")
 
 		visit(node.value)
 		@context << name
@@ -108,13 +107,19 @@ class Empirical::IvarProcessor < Empirical::BaseProcessor
 		end
 
 		if names.any?
-			checks = names.map { |name| "#{check_opening(name)}#{name}#{check_closing(name)}" }
+			offset = node.location.start_offset
+			local = "__empirical_multi_write_#{offset}__"
+
+			checks = names.each_with_index.map do |name, index|
+				opening, closing = check(name, "#{offset}_#{index}")
+				"#{opening}#{name}#{closing}"
+			end
 
 			wrap(
 				node.location.start_offset,
 				node.location.end_offset,
-				"(#{MULTI_WRITE_LOCAL} = (",
-				");#{checks.join(';')};#{MULTI_WRITE_LOCAL})"
+				"(#{local} = (",
+				");#{checks.join(';')};#{local})"
 			)
 		end
 
@@ -236,28 +241,28 @@ class Empirical::IvarProcessor < Empirical::BaseProcessor
 	private def check_value(name, value)
 		# `@a = 1, 2` and `@a = *list` are arrays without brackets
 		brackets = Prism::ArrayNode === value && value.opening_loc.nil?
+		opening, closing = check(name, value.location.start_offset)
 
 		wrap(
 			value.location.start_offset,
 			value.location.end_offset,
-			"#{check_opening(name)}#{brackets ? '[' : '('}",
-			"#{brackets ? ']' : ')'}#{check_closing(name)}"
+			"#{opening}#{brackets ? '[' : '('}",
+			"#{brackets ? ']' : ')'}#{closing}"
 		)
 	end
 
-	private def check_opening(name)
+	# The opening and closing source to put around a value that is about to be written to an ivar.
+	# The offset keeps the temporary unique, so it can’t collide with a local or with another check.
+	private def check(name, offset)
 		if (type = inline_type(name))
-			"(#{type} === (#{VALUE_LOCAL} = "
-		else
-			"::Empirical.__check_ivar__(self, :#{name}, "
-		end
-	end
+			local = "__empirical_ivar_#{offset}__"
 
-	private def check_closing(name)
-		if (type = inline_type(name))
-			") ? #{VALUE_LOCAL} : ::Kernel.raise(::Empirical::TypeError.ivar_type_error(name: :#{name}, value: #{VALUE_LOCAL}, expected: #{type}, context: self)))"
+			[
+				"(#{type} === (#{local} = ",
+				") ? #{local} : ::Kernel.raise(::Empirical::TypeError.ivar_type_error(name: :#{name}, value: #{local}, expected: #{type}, context: self)))",
+			]
 		else
-			")"
+			["::Empirical.__check_ivar__(self, :#{name}, ", ")"]
 		end
 	end
 
