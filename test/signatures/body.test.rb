@@ -174,6 +174,22 @@ test "singleton method on self" do
 	end
 end
 
+test "non-ASCII method and parameter names" do
+	mod = Module.new do
+		extend self
+
+		fun café(größe = Integer) => String do
+			"☕" * größe
+		end
+	end
+
+	assert_equal mod.café(2), "☕☕"
+
+	assert_raises Empirical::TypeError do
+		mod.café("2")
+	end
+end
+
 test "BasicObject subclasses" do
 	klass = Class.new(BasicObject) do
 		fun example(class: ::String) => ::String do

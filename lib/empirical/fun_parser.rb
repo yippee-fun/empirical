@@ -2,7 +2,7 @@
 
 class Empirical::FunParser
 	USAGE = "Expected `fun name(parameters) => ReturnType do ... end`."
-	METHOD_NAME = /\A[A-Za-z_][A-Za-z0-9_]*[?!]?\z/
+	METHOD_NAME = /\A(?:[A-Za-z_]|[^[:ascii:]])(?:[A-Za-z0-9_]|[^[:ascii:]])*[?!]?\z/
 
 	def initialize(path:)
 		@path = path
