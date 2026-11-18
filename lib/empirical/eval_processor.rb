@@ -62,20 +62,13 @@ module Empirical
 				end
 
 				if node.receiver
-					receiver_local = "__eval_receiver_#{SecureRandom.hex(8)}__"
+					receiver_local = "__eval_receiver_#{node.location.start_offset}__"
 					receiver_location = node.receiver.location
 
-					@annotations.push(
-						[receiver_location.start_character_offset, 0, "(#{receiver_local} = "],
-						[receiver_location.end_character_offset, 0, ")"],
-						[location.start_character_offset, 0, "*(::Empirical.__process_eval_args__(#{receiver_local}, :#{name}, "],
-						[location.end_character_offset, 0, closing]
-					)
+					wrap(receiver_location.start_offset, receiver_location.end_offset, "(#{receiver_local} = ", ")")
+					wrap(location.start_offset, location.end_offset, "*(::Empirical.__process_eval_args__(#{receiver_local}, :#{name}, ", closing)
 				else
-					@annotations.push(
-						[location.start_character_offset, 0, "*(::Empirical.__process_eval_args__(self, :#{name}, "],
-						[location.end_character_offset, 0, closing]
-					)
+					wrap(location.start_offset, location.end_offset, "*(::Empirical.__process_eval_args__(self, :#{name}, ", closing)
 				end
 			end
 
