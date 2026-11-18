@@ -11,6 +11,7 @@
 class Empirical::IvarProcessor < Empirical::BaseProcessor
 	VALUE_LOCAL = "__empirical_ivar__"
 	MULTI_WRITE_LOCAL = "__empirical_multi_write__"
+	WRITER_MACROS = Set[:attr_writer, :attr_accessor].freeze
 
 	def initialize(...)
 		super
@@ -202,6 +203,11 @@ class Empirical::IvarProcessor < Empirical::BaseProcessor
 	end
 
 	def visit_call_node(node)
+		# Ruby’s own writers set the ivar directly, so they’re replaced with ones that type check.
+		if WRITER_MACROS.include?(node.name) && node.arguments && (node.receiver in nil | Prism::SelfNode)
+			wrap(node.location.start_offset, node.location.end_offset, "::Empirical.__check_writers__(self, (", "))")
+		end
+
 		return super unless node.safe_navigation?
 
 		visit(node.receiver)

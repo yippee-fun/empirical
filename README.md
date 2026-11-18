@@ -184,7 +184,18 @@ User.new(1) # Empirical::TypeError: Instance variable @name assigned the wrong t
 
 `reader:`, `writer:` and `predicate:` each take `:public`, `:protected` or `:private`.
 
-One gap: Ruby’s own `attr_writer` and `attr_accessor`, and `instance_variable_set`, write the ivar directly and aren’t checked. Use `writer:` instead.
+`attr_writer` and `attr_accessor` are checked too, so you can keep using them alongside `prop`.
+
+```ruby
+class User
+  prop :name, String
+  attr_accessor :name
+end
+
+User.new.name = 1 # Empirical::TypeError
+```
+
+One gap: `instance_variable_set` writes the ivar directly and isn’t checked.
 
 ## How it works
 

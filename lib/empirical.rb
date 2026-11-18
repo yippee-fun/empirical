@@ -143,6 +143,34 @@ module Empirical
 		value
 	end
 
+	# For internal use only. Takes what `attr_writer` or `attr_accessor` returned and redefines the writers
+	# so they type check, keeping their visibility.
+	def self.__check_writers__(owner, method_names)
+		method_names.each do |method_name|
+			next unless method_name.end_with?("=")
+
+			ivar = "@#{method_name.name.delete_suffix('=')}"
+
+			visibility = if PRIVATE_METHOD_DEFINED_METHOD.bind_call(owner, method_name)
+				PRIVATE_METHOD
+			elsif PROTECTED_METHOD_DEFINED_METHOD.bind_call(owner, method_name)
+				PROTECTED_METHOD
+			else
+				PUBLIC_METHOD
+			end
+
+			MODULE_EVAL_METHOD.bind_call(owner, <<~RUBY, __FILE__, __LINE__ + 1)
+				def #{method_name}(value)
+					#{ivar} = ::Empirical.__check_ivar__(self, :#{ivar}, value)
+				end
+			RUBY
+
+			visibility.bind_call(owner, method_name)
+		end
+
+		method_names
+	end
+
 	# The ivar types declared on a class and its ancestors.
 	private_class_method def self.ivar_types_for(owner)
 		INHERITED_IVAR_TYPES[owner] ||= owner.ancestors.reverse_each.with_object({}) do |ancestor, types|
@@ -161,6 +189,12 @@ Empirical::INSTANCE_VARIABLE_SET_METHOD = Object.instance_method(:instance_varia
 Empirical::INSTANCE_VARIABLE_GET_METHOD = Object.instance_method(:instance_variable_get)
 Empirical::DEFINE_METHOD_METHOD = Module.instance_method(:define_method)
 Empirical::ATTR_READER_METHOD = Module.instance_method(:attr_reader)
+Empirical::MODULE_EVAL_METHOD = Module.instance_method(:module_eval)
+Empirical::PRIVATE_METHOD_DEFINED_METHOD = Module.instance_method(:private_method_defined?)
+Empirical::PROTECTED_METHOD_DEFINED_METHOD = Module.instance_method(:protected_method_defined?)
+Empirical::PUBLIC_METHOD = Module.instance_method(:public)
+Empirical::PROTECTED_METHOD = Module.instance_method(:protected)
+Empirical::PRIVATE_METHOD = Module.instance_method(:private)
 
 class BasicObject
 	def self.prop(name, type, reader: nil, writer: nil, predicate: nil)
