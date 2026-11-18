@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 class Empirical::SignatureProcessor < Empirical::BaseProcessor
-	RETURN_LOCAL = Empirical::FunGenerator::RETURN_LOCAL
 	METHOD_DEFINING_BLOCKS = Set[:lambda, :define_method, :define_singleton_method].freeze
 
 	def initialize(...)
@@ -63,16 +62,16 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 			else
 				@annotations << [keyword_end, 0, " ::Kernel.raise(::Empirical::NeverError.new)"]
 			end
-		in { kind: :typed, return_check: }
-			check = ";(#{return_check});#{RETURN_LOCAL})"
+		in { kind: :typed, return_local:, return_check: }
+			check = ";(#{return_check});#{return_local})"
 
 			case arguments
 			in nil
-				@annotations << [keyword_end, 0, " (#{RETURN_LOCAL} = nil#{check}"]
+				@annotations << [keyword_end, 0, " (#{return_local} = nil#{check}"]
 			in [Prism::SplatNode] | [_, _, *]
-				wrap(keyword_end, node.location.end_offset, " (#{RETURN_LOCAL} = [", "]#{check}")
+				wrap(keyword_end, node.location.end_offset, " (#{return_local} = [", "]#{check}")
 			in [_]
-				wrap(keyword_end, node.location.end_offset, " (#{RETURN_LOCAL} = (", ")#{check}")
+				wrap(keyword_end, node.location.end_offset, " (#{return_local} = (", ")#{check}")
 			end
 		end
 
@@ -106,7 +105,11 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 
 		@annotations.concat(generator.annotations)
 		@compiled << call
-		@scope_for_block[fun.body] = { kind: fun.return_type.kind, return_check: generator.return_check }
+		@scope_for_block[fun.body] = {
+			kind: fun.return_type.kind,
+			return_local: generator.return_local,
+			return_check: generator.return_check,
+		}
 	end
 
 	private def with_return_scope(scope)

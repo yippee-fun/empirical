@@ -1,7 +1,23 @@
 # frozen_string_literal: true
 
 def generated(source)
-	Empirical.process(source, with: Empirical::SignatureProcessor).gsub(/T_\h{12}_\d+/, "T")
+	Empirical.process(source, with: Empirical::SignatureProcessor)
+		.gsub(/T_\h{12}_\d+/, "T")
+		.gsub(/__empirical_return_\d+__/, "__empirical_return__")
+end
+
+test "each fun has its own return temporary" do
+	processed = Empirical.process(<<~RUBY, with: Empirical::SignatureProcessor)
+		fun a => Integer do
+			1
+		end
+
+		fun b => Integer do
+			2
+		end
+	RUBY
+
+	assert_equal processed.scan(/__empirical_return_\d+__ = begin/).uniq.size, 2
 end
 
 test "void method with a required keyword" do

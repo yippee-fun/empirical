@@ -3,16 +3,15 @@
 # Turns a parsed Fun into source edits that rewrite it as a plain `def` with inline type checks.
 # Edits never add or remove lines, so line numbers in the output match the original source.
 class Empirical::FunGenerator
-	RETURN_LOCAL = "__empirical_return__"
-
 	RESERVED_WORDS = Set[
 		:alias, :and, :begin, :break, :case, :class, :def, :defined?, :do, :else, :elsif, :end, :ensure,
 		:false, :for, :if, :in, :module, :next, :nil, :not, :or, :redo, :rescue, :retry, :return, :self,
 		:super, :then, :true, :undef, :unless, :until, :when, :while, :yield,
 	].freeze
 
-	# return_check is the statement that checks RETURN_LOCAL, for methods with a typed return.
-	attr_reader :annotations, :return_check
+	# return_local holds the value being returned. It’s named from the source offset so it can’t collide
+	# with a local. return_check is the statement that checks it, for methods with a typed return.
+	attr_reader :annotations, :return_local, :return_check
 
 	def initialize(fun, source:, site:)
 		@fun = fun
@@ -21,6 +20,7 @@ class Empirical::FunGenerator
 		@annotations = []
 		@checks = []
 		@stores = []
+		@return_local = "__empirical_return_#{fun.call.location.start_offset}__"
 		@return_check = nil
 	end
 
@@ -93,7 +93,7 @@ class Empirical::FunGenerator
 	private def body_opening
 		case @fun.return_type.kind
 		in :typed
-			"#{RETURN_LOCAL} = begin"
+			"#{@return_local} = begin"
 		in :void | :never
 			"begin"
 		end
@@ -109,9 +109,9 @@ class Empirical::FunGenerator
 			node = @fun.return_type.node
 			ident = store(node, @fun.return_type.source)
 
-			@return_check = "::Kernel.raise(::Empirical::TypeError.return_type_error(value: #{RETURN_LOCAL}, expected: #{ident}, method_name: :#{method_name}, context: self)) unless #{ident} === #{RETURN_LOCAL}"
+			@return_check = "::Kernel.raise(::Empirical::TypeError.return_type_error(value: #{@return_local}, expected: #{ident}, method_name: :#{method_name}, context: self)) unless #{ident} === #{@return_local}"
 
-			"end;#{@return_check};#{RETURN_LOCAL}"
+			"end;#{@return_check};#{@return_local}"
 		end
 	end
 
