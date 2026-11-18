@@ -242,6 +242,7 @@ Empirical::PROTECTED_METHOD = Module.instance_method(:protected)
 Empirical::PRIVATE_METHOD = Module.instance_method(:private)
 Empirical::NAME_METHOD = Module.instance_method(:name)
 Empirical::SEND_METHOD = BasicObject.instance_method(:__send__)
+Empirical::EQUAL_METHOD = BasicObject.instance_method(:equal?)
 
 class Module
 	# Called when a class or module body in an included file closes for the first time.

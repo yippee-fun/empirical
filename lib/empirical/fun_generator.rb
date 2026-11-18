@@ -21,6 +21,7 @@ class Empirical::FunGenerator
 		@checks = []
 		@stores = []
 		@return_local = "__empirical_return_#{fun.call.location.start_offset}__"
+		@receiver_local = "__empirical_receiver_#{fun.call.location.start_offset}__"
 		@return_check = nil
 	end
 
@@ -94,6 +95,9 @@ class Empirical::FunGenerator
 		case @fun.return_type.kind
 		in :typed
 			"#{@return_local} = begin"
+		in :itself
+			# An early return can happen inside `instance_eval`, where `self` is something else.
+			"#{@receiver_local} = self;#{@return_local} = begin"
 		in :void | :never
 			"begin"
 		end
@@ -105,6 +109,10 @@ class Empirical::FunGenerator
 			"end;::Empirical::Void"
 		in :never
 			"end;::Kernel.raise(::Empirical::NeverError.new)"
+		in :itself
+			@return_check = "::Kernel.raise(::Empirical::TypeError.itself_return_error(value: #{@return_local}, method_name: :#{method_name}, context: #{@receiver_local})) unless ::Empirical::EQUAL_METHOD.bind_call(#{@receiver_local}, #{@return_local})"
+
+			"end;#{@return_check};#{@return_local}"
 		in :typed
 			node = @fun.return_type.node
 			ident = store(node, @fun.return_type.source)

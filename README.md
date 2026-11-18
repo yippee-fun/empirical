@@ -106,10 +106,11 @@ Ruby only allows simple expressions in block parameter defaults, so wrap anythin
 
 ### Return types
 
-Any type works as a return type. Early returns are checked too. There are two special ones:
+Any type works as a return type. Early returns are checked too. There are three special ones:
 
 - `void` means the return value shouldn’t be used. The method returns an object that raises if you call anything on it, and `return value` is a compile-time error.
 - `never` means the method doesn’t return, because it always raises or loops forever. Returning raises an `Empirical::NeverError`.
+- `itself` means the method returns the object it was called on. Returning any other object, even one of the same class, raises an `Empirical::TypeError`.
 
 ```ruby
 fun log(message = String) => void do
@@ -119,7 +120,14 @@ end
 fun fail!(message = String) => never do
   raise Error, message
 end
+
+fun add(item = Item) => itself do
+  @items << item
+  self
+end
 ```
+
+Types are evaluated where the method is defined, so `self` as a return type means the class, and any instance of it would pass. Use `itself` when it has to be the same object.
 
 ### Visibility, singleton methods, blocks
 

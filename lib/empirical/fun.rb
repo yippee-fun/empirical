@@ -14,6 +14,6 @@ module Empirical
 	# type is the node the type was written as. type_source and default are single-line Ruby source.
 	Fun::Parameter = Data.define(:kind, :name, :node, :type, :type_source, :default, :optional)
 
-	# kind is :void, :never or :typed
+	# kind is :void, :never, :itself or :typed
 	Fun::ReturnType = Data.define(:kind, :node, :source)
 end
