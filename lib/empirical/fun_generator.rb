@@ -20,6 +20,7 @@ class Empirical::FunGenerator
 		@annotations = []
 		@checks = []
 		@stores = []
+		@parameter_types = []
 		@return_local = "__empirical_return_#{fun.call.location.start_offset}__"
 		@return_check = nil
 	end
@@ -40,9 +41,27 @@ class Empirical::FunGenerator
 		)
 
 		insert(body.closing_loc.start_offset, ";#{body_closing};")
-		insert(body.closing_loc.end_offset, ";#{@stores.join(';')};") if @stores.any?
+		insert(body.closing_loc.end_offset, ";#{[*@stores, declaration].join(';')};")
 
 		self
+	end
+
+	# Registers the types under the location `Method#source_location` will report for the `def`.
+	private def declaration
+		lines_since_def = @fun.body.closing_loc.start_line - @fun.call.message_loc.start_line
+
+		"::Empirical.__declare_fun_types__(__FILE__, __LINE__ - #{lines_since_def}, :#{method_name}, {#{@parameter_types.join(', ')}}, #{return_type})"
+	end
+
+	private def return_type
+		@return_type ||= case @fun.return_type.kind
+		in :void
+			"::Literal::Types._Void"
+		in :never
+			"::Literal::Types._Never"
+		in :typed
+			store(@fun.return_type.node, @fun.return_type.source)
+		end
 	end
 
 	private def rewrite(parameter)
@@ -81,6 +100,7 @@ class Empirical::FunGenerator
 		end
 
 		ident = store(type, parameter.type_source)
+		@parameter_types << "#{name}: #{ident}"
 		value = RESERVED_WORDS.include?(name) ? "::Kernel.binding.local_variable_get(:#{name})" : name
 
 		@checks << "::Kernel.raise(::Empirical::TypeError.argument_type_error(name: :#{name}, value: #{value}, expected: #{ident}, method_name: :#{method_name}, context: self)) unless #{ident} === #{value}"
@@ -106,8 +126,7 @@ class Empirical::FunGenerator
 		in :never
 			"end;::Kernel.raise(::Empirical::NeverError.new)"
 		in :typed
-			node = @fun.return_type.node
-			ident = store(node, @fun.return_type.source)
+			ident = return_type
 
 			@return_check = "::Kernel.raise(::Empirical::TypeError.return_type_error(value: #{@return_local}, expected: #{ident}, method_name: :#{method_name}, context: self)) unless #{ident} === #{@return_local}"
 

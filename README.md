@@ -138,6 +138,21 @@ end
 
 `rescue` and `ensure` work in the body just as they do in a `def`.
 
+### Introspection
+
+`Method` and `UnboundMethod` have `parameter_types` and `return_type`. Untyped parameters are left out, and both return `nil` for methods not defined with `fun`.
+
+```ruby
+fun create(name = String, tags = [Symbol], admin?: _Boolean) => User do
+  # ...
+end
+
+method(:create).parameter_types # => { name: String, tags: _Array(Symbol), admin: _Nilable(_Boolean) }
+method(:create).return_type     # => User
+```
+
+A `void` method’s return type is `_Void`, and a `never` method’s is `_Never`.
+
 ### What `fun` can’t do
 
 Use a plain `def` for these.
