@@ -149,6 +149,25 @@ test "a literal default of the wrong type" do
 	assert_equal message, %(example.rb:1: The default for `count` in `repeat` is "twice", which doesn’t match Integer.)
 end
 
+test "a default error points at the line the default is on" do
+	message = static_error(<<~RUBY)
+		fun repeat(text = String, count: Integer) => String do |
+			text: "a",
+			count: "twice"
+		|
+			text * count
+		end
+	RUBY
+
+	assert message.start_with?("example.rb:3: The default for `count`")
+end
+
+test "the literal is compared in the file’s own scope, where its refinements apply" do
+	processed = Empirical.process("fun answer => String do\n\t:yes\nend\n", with: Empirical::SignatureProcessor)
+
+	assert processed.match?(/StaticCheck\.wrong_value\(.*\) unless ::Empirical::TypeStore::T_\h+_\d+ === \(:yes\)/)
+end
+
 test "returning a parameter whose type can never match" do
 	message = static_error(<<~RUBY)
 		fun name_of(id = Integer) => String do

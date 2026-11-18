@@ -11,8 +11,9 @@ module Empirical
 	#   :keyword_splat     `a: {KeyType => ValueType}`
 	#   :untyped           `*args`, `**kwargs`, `&block` or `...`, which are already valid in a `def`
 	#
-	# type is the node the type was written as. type_source and default are single-line Ruby source.
-	Fun::Parameter = Data.define(:kind, :name, :node, :type, :type_source, :default, :optional)
+	# type is the node the type was written as. type_source and default are single-line Ruby source,
+	# and default_line is the line the default was written on.
+	Fun::Parameter = Data.define(:kind, :name, :node, :type, :type_source, :default, :default_line, :optional)
 
 	# kind is :void, :never, :itself or :typed
 	Fun::ReturnType = Data.define(:kind, :node, :source)

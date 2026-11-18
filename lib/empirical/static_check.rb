@@ -5,10 +5,14 @@
 module Empirical::StaticCheck
 	extend self
 
-	# A literal that is about to flow into a typed slot.
-	def value(expected, value, file, line, description)
-		return if expected === value
+	# Source for checking a literal that flows into a typed slot. The `===` is in the generated code
+	# rather than in here so it runs in the file’s own scope, like the runtime checks do, and sees
+	# any refinements active there.
+	def value_check_source(type, literal, line, description)
+		"::Empirical::StaticCheck.wrong_value(#{type}, (#{literal}), __FILE__, #{line}, #{description.inspect}) unless #{type} === (#{literal})"
+	end
 
+	def wrong_value(expected, value, file, line, description)
 		raise Empirical::StaticTypeError, "#{file}:#{line}: #{description} #{value.inspect}, which doesn’t match #{expected.inspect}."
 	end
 

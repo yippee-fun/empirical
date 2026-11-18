@@ -93,11 +93,11 @@ class Empirical::FunParser
 	end
 
 	private def parameter(kind, name, node, type, type_source, optional: false)
-		Empirical::Fun::Parameter.new(kind:, name:, node:, type:, type_source:, default: nil, optional:)
+		Empirical::Fun::Parameter.new(kind:, name:, node:, type:, type_source:, default: nil, default_line: nil, optional:)
 	end
 
 	private def untyped(node)
-		Empirical::Fun::Parameter.new(kind: :untyped, name: nil, node:, type: nil, type_source: nil, default: nil, optional: false)
+		Empirical::Fun::Parameter.new(kind: :untyped, name: nil, node:, type: nil, type_source: nil, default: nil, default_line: nil, optional: false)
 	end
 
 	private def ensure_single_splat(parameters, signature)
@@ -113,7 +113,7 @@ class Empirical::FunParser
 
 		parameters = parameters.map do |parameter|
 			if (parameter.kind in :positional | :keyword) && (default = defaults.delete(parameter.name))
-				parameter.with(default: single_line(default))
+				parameter.with(default: single_line(default), default_line: default.location.start_line)
 			else
 				parameter
 			end

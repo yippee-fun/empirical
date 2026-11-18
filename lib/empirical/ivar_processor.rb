@@ -315,7 +315,7 @@ class Empirical::IvarProcessor < Empirical::BaseProcessor
 			# `@a = 1, 2` is an array without brackets
 			source = (Prism::ArrayNode === value && value.opening_loc.nil?) ? "[#{value.slice}]" : value.slice
 
-			@static_checks << "::Empirical::StaticCheck.value(#{expected}, (#{source}), __FILE__, #{line}, #{"`#{name}` is assigned".inspect})"
+			@static_checks << Empirical::StaticCheck.value_check_source(expected, source, line, "`#{name}` is assigned")
 		in Prism::InstanceVariableReadNode if (actual = inline_type(value.name))
 			@static_checks << "::Empirical::StaticCheck.type(#{expected}, #{actual}, __FILE__, #{line}, #{"`#{name}` is assigned `#{value.name}`".inspect})"
 		else

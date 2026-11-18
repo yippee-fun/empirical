@@ -31,7 +31,7 @@ class Empirical::FunChecker
 			default = parameter.default
 			next unless default && literal_source?(default)
 
-			value_check(@parameter_types.fetch(parameter.name), default, parameter.node, "The default for `#{parameter.name}` in `#{@method_name}` is")
+			value_check(@parameter_types.fetch(parameter.name), default, parameter.default_line, "The default for `#{parameter.name}` in `#{@method_name}` is")
 		end
 	end
 
@@ -41,11 +41,11 @@ class Empirical::FunChecker
 		[*tails(@body), *explicit_returns(@body)].filter_map do |node|
 			case node
 			in nil
-				value_check(@return_type, "nil", @fun.body, "`#{@method_name}` returns")
+				value_check(@return_type, "nil", @fun.body.location.start_line, "`#{@method_name}` returns")
 			in Prism::ReturnNode
-				value_check(@return_type, "nil", node, "`#{@method_name}` returns")
+				value_check(@return_type, "nil", node.location.start_line, "`#{@method_name}` returns")
 			in Empirical::LiteralNode
-				value_check(@return_type, node.slice, node, "`#{@method_name}` returns") unless node.slice.include?("\n")
+				value_check(@return_type, node.slice, node.location.start_line, "`#{@method_name}` returns") unless node.slice.include?("\n")
 			else
 				type = declared_type(node, in_block: @returned_in_block.include?(node))
 				type_check(@return_type, type, node, "`#{@method_name}` returns `#{node.slice}`") if type
@@ -76,8 +76,8 @@ class Empirical::FunChecker
 		end
 	end
 
-	private def value_check(type, source, node, description)
-		"::Empirical::StaticCheck.value(#{type}, (#{source}), __FILE__, #{node.location.start_line}, #{description.inspect})"
+	private def value_check(type, source, line, description)
+		Empirical::StaticCheck.value_check_source(type, source, line, description)
 	end
 
 	private def type_check(expected, actual, node, description)
