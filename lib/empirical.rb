@@ -11,7 +11,10 @@ require "empirical/ivar_processor"
 require "empirical/eval_processor"
 require "empirical/fun"
 require "empirical/fun_parser"
+require "empirical/literal_node"
+require "empirical/fun_checker"
 require "empirical/fun_generator"
+require "empirical/static_check"
 require "empirical/signature_processor"
 require "empirical/definition_hooks_processor"
 require "empirical/configuration"
@@ -49,6 +52,13 @@ module Empirical
 			remove_const(name) if const_defined?(name, false)
 			const_set(name, type)
 		end
+
+		MISSING = Object.new.freeze
+
+		# For a type that may not have been stored yet.
+		def self.lookup(name)
+			const_defined?(name, false) ? const_get(name, false) : MISSING
+		end
 	end
 
 	CONFIG = Configuration.new
@@ -60,6 +70,9 @@ module Empirical
 
 	TypedSignatureError = Class.new(SyntaxError)
 	NeverError = Class.new(RuntimeError)
+
+	# Raised when a file loads, for a type mistake that is visible in its source.
+	StaticTypeError = Class.new(::TypeError)
 
 	# Initializes Empirical so that code loaded after this point will:
 	#   1. be guarded against undefined instance variable reads,

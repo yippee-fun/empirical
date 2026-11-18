@@ -14,11 +14,19 @@ class Empirical::IvarProcessor < Empirical::BaseProcessor
 	def initialize(...)
 		super
 		@props = {}
+		@static_checks = []
 		@inline = false
+		@fun_bodies = {}.compare_by_identity
 	end
 
 	def visit_class_node(node)
-		with_props(props_declared_in(node.body)) { new_context { super } }
+		declarations = prop_declarations_in(node.body)
+		props = declarations.to_h { |ivar, _type, ident| [ivar, "::Empirical::TypeStore::#{ident}"] }
+		static_checks = []
+
+		with_props(props, static_checks) { new_context { super } }
+
+		store_prop_types(declarations, static_checks)
 	end
 
 	def visit_module_node(node)
@@ -33,8 +41,9 @@ class Empirical::IvarProcessor < Empirical::BaseProcessor
 		with_inline(node.receiver.nil?) { new_context { super } }
 	end
 
+	# The body of a `fun` is a method body, like a `def`. Any other block might run with a different `self`.
 	def visit_block_node(node)
-		with_inline(false) { new_context { super } }
+		with_inline(@fun_bodies.fetch(node, false)) { new_context { super } }
 	end
 
 	def visit_lambda_node(node)
@@ -70,6 +79,7 @@ class Empirical::IvarProcessor < Empirical::BaseProcessor
 	end
 
 	def visit_instance_variable_write_node(node)
+		check_statically(node)
 		check_value(node.name, node.value)
 		visit(node.value)
 		@context << node.name
@@ -213,6 +223,10 @@ class Empirical::IvarProcessor < Empirical::BaseProcessor
 			wrap(node.location.start_offset, node.location.end_offset, "::Empirical.__check_writers__(self, (", "))")
 		end
 
+		if Prism::BlockNode === node.block && (fun = fun_defined_by(node))
+			@fun_bodies[node.block] = instance_method_fun?(fun)
+		end
+
 		return super unless node.safe_navigation?
 
 		visit(node.receiver)
@@ -270,31 +284,54 @@ class Empirical::IvarProcessor < Empirical::BaseProcessor
 		@props[name] if @inline
 	end
 
-	# Finds `prop :name, Type` calls in a class body and stores each type so writes can check against it inline.
-	private def props_declared_in(body)
-		statements = (Prism::StatementsNode === body) ? body.body : []
+	# Stores each prop’s type so writes can check against it inline. The static checks found in the
+	# class run as the last prop is declared, once every type they mention has been stored.
+	private def store_prop_types(declarations, static_checks)
+		declarations.each_with_index do |(_ivar, type, ident), index|
+			location = type.location
 
-		statements.each_with_object({}) do |statement, props|
-			next unless statement in Prism::CallNode[
-				name: :prop,
-				receiver: nil,
-				arguments: Prism::ArgumentsNode[arguments: [Prism::SymbolNode => name, type, *]]
-			]
+			if static_checks.any? && index == declarations.size - 1
+				wrap(location.start_offset, location.end_offset, "::Empirical::StaticCheck.after(", ") { #{static_checks.join(';')} }")
+			end
 
-			ident = "T_#{site}_#{type.location.start_offset}"
-
-			wrap(type.location.start_offset, type.location.end_offset, "::Empirical::TypeStore.store(:#{ident}, (", "))")
-
-			props[:"@#{name.unescaped}"] = "::Empirical::TypeStore::#{ident}"
+			wrap(location.start_offset, location.end_offset, "::Empirical::TypeStore.store(:#{ident}, (", "))")
 		end
 	end
 
-	private def with_props(props)
+	# A write whose value has a type that is known from the source: a literal, or another typed ivar.
+	private def check_statically(node)
+		name = node.name
+		value = node.value
+		expected = inline_type(name)
+
+		return unless expected
+
+		line = node.location.start_line
+
+		case value
+		in Empirical::LiteralNode
+			return if value.slice.include?("\n")
+
+			# `@a = 1, 2` is an array without brackets
+			source = (Prism::ArrayNode === value && value.opening_loc.nil?) ? "[#{value.slice}]" : value.slice
+
+			@static_checks << Empirical::StaticCheck.value_check_source(expected, source, line, "`#{name}` is assigned")
+		in Prism::InstanceVariableReadNode if (actual = inline_type(value.name))
+			@static_checks << "::Empirical::StaticCheck.type(#{expected}, #{actual}, __FILE__, #{line}, #{"`#{name}` is assigned `#{value.name}`".inspect})"
+		else
+			# not known
+		end
+	end
+
+	private def with_props(props, static_checks = [])
 		original_props = @props
+		original_static_checks = @static_checks
 		@props = props
+		@static_checks = static_checks
 		with_inline(false) { yield }
 	ensure
 		@props = original_props
+		@static_checks = original_static_checks
 	end
 
 	private def with_inline(inline)

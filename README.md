@@ -303,6 +303,54 @@ Reopening a class that was defined somewhere Empirical didn’t see, such as a l
 
 The hooks only run for class and module bodies in the files you include, and they don’t run if the body raises.
 
+## Checks when a file loads
+
+Some mistakes are visible in the source. Empirical checks those once, when the method or class is defined, so they surface when the file loads instead of when the line eventually runs.
+
+```ruby
+fun answer => String do
+  42
+end
+# Empirical::StaticTypeError: app/answer.rb:2: `answer` returns 42, which doesn’t match String.
+```
+
+It checks a value whose type it can know from the source, wherever that value meets a declared type:
+
+| Value | Checked against |
+|---|---|
+| A literal that is returned, including by an early `return` | The return type |
+| A literal default in the block parameters | The parameter’s type |
+| A literal written to an ivar in an instance method | The `prop` in the same class |
+| A parameter that is returned and never reassigned | The return type |
+| A typed ivar that is returned | The return type |
+| A parameter or a typed ivar written to a typed ivar | The `prop` in the same class |
+
+Literals are checked with the real type, so this works for any type, such as `_Integer(1..)` or one of your own.
+
+For a parameter or an ivar, only the declared type is known, not the value. Empirical reports those only when the two types can never overlap. An `Integer` returned as a `String` is an error. A `Numeric` returned as an `Integer` is not, because it might be one at runtime, where it is still checked.
+
+```ruby
+fun name_of(id = Integer) => String do
+  id
+end
+# app/user.rb:2: `name_of` returns `id`, which is declared as Integer and can never match String.
+```
+
+Ivars are checked the same way, because every ivar has a declared type:
+
+```ruby
+class Counter
+  prop :count, Integer
+
+  fun label => String do
+    @count
+  end
+end
+# app/counter.rb:5: `label` returns `@count`, which is declared as Integer and can never match String.
+```
+
+Anything Empirical can’t be sure about is left to the runtime checks.
+
 ## How it works
 
 Empirical hooks into `require`. When a matching file loads, it is parsed with Prism and rewritten before Ruby compiles it. A `fun` becomes a `def` with the type checks inlined at the top and a return check at the bottom. Types are evaluated once, where the method is defined.

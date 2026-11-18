@@ -11,6 +11,7 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 		@return_scopes = [nil]
 		@scope_for_block = {}.compare_by_identity
 		@compiled = Set[].compare_by_identity
+		@ivar_types = {}
 	end
 
 	def visit_call_node(node)
@@ -40,6 +41,24 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 
 	def visit_def_node(node)
 		with_return_scope(nil) { super }
+	end
+
+	# The props of the class a fun is written in give its ivars a known type. They are looked up by
+	# name when the fun is defined, since a prop below it in the class won’t have been stored yet.
+	def visit_class_node(node)
+		ivar_types = prop_declarations_in(node.body).to_h do |ivar, _type, ident|
+			[ivar, "::Empirical::TypeStore.lookup(:#{ident})"]
+		end
+
+		with_ivar_types(ivar_types) { super }
+	end
+
+	def visit_module_node(node)
+		with_ivar_types({}) { super }
+	end
+
+	def visit_singleton_class_node(node)
+		with_ivar_types({}) { super }
 	end
 
 	def visit_lambda_node(node)
@@ -78,30 +97,10 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 		super
 	end
 
-	private def fun?(node)
-		node.name == :fun && node.receiver.nil? && (node.arguments || node.block)
-	end
-
-	# In `private fun foo => Type do ... end`, Ruby attaches the block to `private`, not to `fun`.
-	private def wrapped_fun(outer)
-		wrappers = [outer]
-		current = outer
-
-		loop do
-			case current.arguments&.arguments
-			in [Prism::CallNode => current]
-				return [current, wrappers] if fun?(current)
-				return if current.block
-				wrappers << current
-			else
-				return
-			end
-		end
-	end
-
 	private def compile(call, body:, wrappers:)
 		fun = @parser.parse(call, body:, wrappers:)
-		generator = Empirical::FunGenerator.new(fun, source: @source, site:).call
+		ivar_types = instance_method_fun?(call) ? @ivar_types : {}
+		generator = Empirical::FunGenerator.new(fun, source: @source, site:, ivar_types:).call
 
 		@annotations.concat(generator.annotations)
 		@compiled << call
@@ -110,6 +109,14 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 			return_local: generator.return_local,
 			return_check: generator.return_check,
 		}
+	end
+
+	private def with_ivar_types(ivar_types)
+		original = @ivar_types
+		@ivar_types = ivar_types
+		yield
+	ensure
+		@ivar_types = original
 	end
 
 	private def with_return_scope(scope)

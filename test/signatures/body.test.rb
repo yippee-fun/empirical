@@ -5,7 +5,7 @@ test "private fun checks early returns" do
 		extend self
 
 		private fun example => String do
-			return 1 if true
+			return 1.to_i if true
 			"Hello"
 		end
 	end
@@ -38,7 +38,7 @@ test "the value of a rescue clause is type checked" do
 		fun example => String do
 			raise ArgumentError
 		rescue ArgumentError
-			1
+			1.to_i
 		end
 	end
 

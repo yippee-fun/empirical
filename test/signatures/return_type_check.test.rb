@@ -17,7 +17,7 @@ test "raises when returning the wrong type" do
 		extend self
 
 		fun example => String do
-			1
+			1.to_i
 		end
 	end
 
@@ -31,7 +31,7 @@ test "raises when early returning the wrong type" do
 		extend self
 
 		fun example => String do
-			return 1 if true
+			return 1.to_i if true
 			"Hello"
 		end
 	end
