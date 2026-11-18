@@ -17,11 +17,12 @@ fun word_frequency(text: String) => _Hash(String, Integer) do
 end
 ```
 
-It gives you three things in the files you opt in:
+It gives you four things in the files you opt in:
 
 1. [Typed methods](#typed-methods) with `fun`.
 2. [Strict instance variables](#strict-instance-variables): reading an undefined ivar raises instead of returning `nil`.
 3. [Typed instance variables](#typed-instance-variables): every ivar you write is declared with `prop` and checked.
+4. [Definition hooks](#definition-hooks): `defined`, `reopened` and `redefined` run when a class body closes.
 
 Types are [Literal](https://literal.fun) types. Anything that responds to `===` works: classes, ranges, procs, and Literal’s generics like `_Array(String)` or `_Nilable(Integer)`.
 
@@ -226,6 +227,56 @@ User.new.name = 1 # Empirical::TypeError
 ```
 
 One gap: `instance_variable_set` writes the ivar directly and isn’t checked.
+
+### With Literal
+
+Empirical’s `prop` declares an ivar and, if you ask, its accessors. You still write `initialize` yourself.
+
+Literal’s `prop` takes the same arguments and builds on them: in a `Literal::Struct`, `Literal::Data`, `Literal::Object`, or any class that extends `Literal::Properties`, it also generates the initializer. Empirical treats those props as declared, so writes inside your own methods are checked against the same types.
+
+```ruby
+class Person < Literal::Struct
+  prop :name, String
+
+  def rename(name)
+    @name = name # checked by Empirical
+  end
+end
+```
+
+## Definition hooks
+
+Ruby tells a class when it is inherited, but that happens before the subclass has a body. Empirical adds three hooks that run when a class or module body closes, after everything in it has been defined.
+
+| Hook | Runs when |
+|---|---|
+| `defined` | The body closes for the first time |
+| `reopened` | The body of a class or module that was already defined closes again |
+| `redefined` | A new class or module takes the name of an earlier one, as happens when code reloads. Calls `defined` unless you override it |
+
+Define them as class methods. Like `inherited`, they are inherited, so a hook on a base class runs for every subclass.
+
+```ruby
+class Model
+  def self.defined
+    super
+    validate_schema!
+    freeze
+  end
+
+  def self.reopened
+    raise "#{self} can’t be reopened"
+  end
+end
+
+class User < Model
+  attribute :name
+end # Model.defined runs here, with User as self
+```
+
+They also run at the end of `Class.new do ... end` and `Module.new do ... end`.
+
+The hooks only run for class and module bodies in the files you include, and they don’t run if the body raises.
 
 ## How it works
 

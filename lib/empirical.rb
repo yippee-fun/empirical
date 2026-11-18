@@ -13,6 +13,7 @@ require "empirical/fun"
 require "empirical/fun_parser"
 require "empirical/fun_generator"
 require "empirical/signature_processor"
+require "empirical/definition_hooks_processor"
 require "empirical/configuration"
 
 require "require-hooks/setup"
@@ -31,6 +32,9 @@ module Empirical
 	METHOD_METHOD = Module.instance_method(:method)
 	IVAR_TYPE = ObjectSpace::WeakKeyMap.new
 	INHERITED_IVAR_TYPES = ObjectSpace::WeakKeyMap.new
+	CLOSED_MODULES = ObjectSpace::WeakKeyMap.new
+	CLOSED_MODULE_NAMES = {}
+	CLOSED_MUTEX = Mutex.new
 
 	module TypeStore
 		# Redefining replaces the type, so reloading a file doesn’t warn or leak.
@@ -44,6 +48,7 @@ module Empirical
 	PROCESSORS = [
 		IvarProcessor,
 		SignatureProcessor,
+		DefinitionHooksProcessor,
 	]
 
 	TypedSignatureError = Class.new(SyntaxError)
@@ -51,8 +56,9 @@ module Empirical
 
 	# Initializes Empirical so that code loaded after this point will:
 	#   1. be guarded against undefined instance variable reads,
-	#   2. have its instance variable writes type checked against `prop` declarations, and
-	#   3. permit users to define type checked method definitions with `fun`
+	#   2. have its instance variable writes type checked against `prop` declarations,
+	#   3. permit users to define type checked method definitions with `fun`, and
+	#   4. call the `defined`, `reopened` and `redefined` hooks when a class or module body closes
 	#
 	# You can pass an array of globs to `include:` and `exclude:`.
 	#
@@ -177,9 +183,41 @@ module Empirical
 		method_names
 	end
 
-	# The ivar types declared on a class and its ancestors.
+	# For internal use only. Called at the end of every class and module body in an included file.
+	def self.__closed__(owner)
+		hook = CLOSED_MUTEX.synchronize do
+			if CLOSED_MODULES[owner]
+				:reopened
+			else
+				CLOSED_MODULES[owner] = true
+				name = NAME_METHOD.bind_call(owner)
+
+				if name.nil?
+					:defined
+				elsif CLOSED_MODULE_NAMES.key?(name)
+					:redefined
+				else
+					CLOSED_MODULE_NAMES[name] = true
+					:defined
+				end
+			end
+		end
+
+		# The body may have declared Literal props.
+		INHERITED_IVAR_TYPES.clear
+
+		SEND_METHOD.bind_call(owner, hook)
+	end
+
+	# The ivar types declared on a class and its ancestors, by Empirical’s `prop` or Literal’s.
 	private_class_method def self.ivar_types_for(owner)
 		INHERITED_IVAR_TYPES[owner] ||= owner.ancestors.reverse_each.with_object({}) do |ancestor, types|
+			if Literal::Properties === ancestor
+				ancestor.literal_properties.each do |property|
+					types[:"@#{property.name}"] = property.type
+				end
+			end
+
 			declared = IVAR_TYPE[ancestor]
 			types.merge!(declared) if declared
 		end
@@ -202,12 +240,29 @@ Empirical::PROTECTED_METHOD_DEFINED_METHOD = Module.instance_method(:protected_m
 Empirical::PUBLIC_METHOD = Module.instance_method(:public)
 Empirical::PROTECTED_METHOD = Module.instance_method(:protected)
 Empirical::PRIVATE_METHOD = Module.instance_method(:private)
+Empirical::NAME_METHOD = Module.instance_method(:name)
+Empirical::SEND_METHOD = BasicObject.instance_method(:__send__)
 
 class Module
-	def prop(name, type, reader: nil, writer: nil, predicate: nil)
-		raise ArgumentError unless reader    in nil | :public | :protected | :private
-		raise ArgumentError unless writer    in nil | :public | :protected | :private
-		raise ArgumentError unless predicate in nil | :public | :protected | :private
+	# Called when a class or module body in an included file closes for the first time.
+	private def defined
+	end
+
+	# Called when the body of a class or module that has already been defined closes again.
+	private def reopened
+	end
+
+	# Called instead of `defined` when a new class or module takes the name of an earlier one,
+	# which is what happens when code is reloaded.
+	private def redefined
+		defined
+	end
+
+	# Takes the same arguments as Literal’s `prop`, which adds an initializer on top of this.
+	def prop(name, type, reader: false, writer: false, predicate: false)
+		raise ArgumentError unless reader    in nil | false | :public | :protected | :private
+		raise ArgumentError unless writer    in nil | false | :public | :protected | :private
+		raise ArgumentError unless predicate in nil | false | :public | :protected | :private
 
 		ivar = :"@#{name}"
 
@@ -238,5 +293,7 @@ class Module
 
 			__send__ predicate, predicate_method_name
 		end
+
+		name
 	end
 end
