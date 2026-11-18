@@ -26,9 +26,9 @@ test "void method with a required keyword" do
 			puts name
 		end
 	RUBY
-		def greet(name:);::Kernel.raise(::Empirical::TypeError.argument_type_error(name: :name, value: name, expected: ::Empirical::TypeStore::T, method_name: :greet, context: self)) unless ::Empirical::TypeStore::T === name;begin;
+		begin;def greet(name:);::Kernel.raise(::Empirical::TypeError.argument_type_error(name: :name, value: name, expected: ::Empirical::TypeStore::T, method_name: :greet, context: self)) unless ::Empirical::TypeStore::T === name;begin;
 			puts name
-		;end;::Empirical::Void;end;::Empirical::TypeStore.store(:T, (String));
+		;end;::Empirical::Void;end;::Empirical::TypeStore.store(:T, (String));::Empirical.__declare_fun_types__(__FILE__, __LINE__ - 2, :greet, {name: ::Empirical::TypeStore::T}, ::Literal::Types._Void);end
 	RUBY
 end
 
@@ -39,15 +39,15 @@ test "typed return with an early return" do
 			2
 		end
 	RUBY
-		private def answer;__empirical_return__ = begin;
+		private begin;def answer;__empirical_return__ = begin;
 			return (__empirical_return__ = ( 1);(::Kernel.raise(::Empirical::TypeError.return_type_error(value: __empirical_return__, expected: ::Empirical::TypeStore::T, method_name: :answer, context: self)) unless ::Empirical::TypeStore::T === __empirical_return__);__empirical_return__) if true
 			2
-		;end;::Kernel.raise(::Empirical::TypeError.return_type_error(value: __empirical_return__, expected: ::Empirical::TypeStore::T, method_name: :answer, context: self)) unless ::Empirical::TypeStore::T === __empirical_return__;__empirical_return__;end;::Empirical::TypeStore.store(:T, (Integer));
+		;end;::Kernel.raise(::Empirical::TypeError.return_type_error(value: __empirical_return__, expected: ::Empirical::TypeStore::T, method_name: :answer, context: self)) unless ::Empirical::TypeStore::T === __empirical_return__;__empirical_return__;end;::Empirical::TypeStore.store(:T, (Integer));::Empirical.__declare_fun_types__(__FILE__, __LINE__ - 3, :answer, {}, ::Empirical::TypeStore::T);end
 	RUBY
 end
 
 test "parameters keep their Ruby shape" do
-	signature = generated(<<~RUBY).lines.first[/\Adef .*?\)/]
+	signature = generated(<<~RUBY).lines.first[/def .*?\)/]
 		fun example(a = String, b = Integer, c = [Symbol], d: String, e?: Integer, f: { Symbol => String }, &block) => void do |b: 1, d: "x"|
 		end
 	RUBY
