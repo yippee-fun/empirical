@@ -1,19 +1,19 @@
 # frozen_string_literal: true
 
 require "prism"
-require "securerandom"
 require "literal"
 require "empirical/version"
 require "empirical/name_error"
 require "empirical/type_error"
+require "empirical/undeclared_instance_variable_error"
 require "empirical/base_processor"
 require "empirical/ivar_processor"
 require "empirical/eval_processor"
-require "empirical/class_callbacks_processor"
+require "empirical/fun"
+require "empirical/fun_parser"
+require "empirical/fun_generator"
 require "empirical/signature_processor"
 require "empirical/configuration"
-require "empirical/types"
-require "empirical/signature"
 
 require "require-hooks/setup"
 
@@ -29,16 +29,21 @@ module Empirical
 	EMPTY_ARRAY = [].freeze
 	EVERYTHING = ["**/*"].freeze
 	METHOD_METHOD = Module.instance_method(:method)
-	OVERLOADED_METHODS = ObjectSpace::WeakKeyMap.new
 	IVAR_TYPE = ObjectSpace::WeakKeyMap.new
+	INHERITED_IVAR_TYPES = ObjectSpace::WeakKeyMap.new
 
-	TypeStore = Module.new
+	module TypeStore
+		# Redefining replaces the type, so reloading a file doesn’t warn or leak.
+		def self.store(name, type)
+			remove_const(name) if const_defined?(name, false)
+			const_set(name, type)
+		end
+	end
 
 	CONFIG = Configuration.new
 	PROCESSORS = [
 		IvarProcessor,
 		SignatureProcessor,
-		ClassCallbacksProcessor,
 	]
 
 	TypedSignatureError = Class.new(SyntaxError)
@@ -46,8 +51,8 @@ module Empirical
 
 	# Initializes Empirical so that code loaded after this point will:
 	#   1. be guarded against undefined instance variable reads,
-	#   2. permit users to define type checked method definitions, and
-	#   3. permit users to define class/module defined callbacks
+	#   2. have its instance variable writes type checked against `prop` declarations, and
+	#   3. permit users to define type checked method definitions with `fun`
 	#
 	# You can pass an array of globs to `include:` and `exclude:`.
 	#
@@ -62,93 +67,151 @@ module Empirical
 		CONFIG.include(*include)
 		CONFIG.exclude(*exclude)
 
+		return if @initialized
+		@initialized = true
+
 		RequireHooks.source_transform(
 			patterns: EVERYTHING,
 			exclude_patterns: EMPTY_ARRAY
 		) do |path, source|
-			source ||= File.read(path)
+			source ||= File.binread(path)
 
 			if CONFIG.match?(path)
-				process(source, with: PROCESSORS)
+				process(source, with: PROCESSORS, path:)
 			else
-				process(source)
+				process(source, path:)
 			end
 		end
 	end
 
-	def self.process(source, with: [])
+	def self.process(source, with: [], path: nil)
 		annotations = []
-		tree = Prism.parse(source).value
+		result = Prism.parse(source)
+		tree = result.value
 
-		Array(with).each do |processor|
-			processor.new(annotations:).visit(tree)
+		[EvalProcessor, *with].each do |processor|
+			processor.new(annotations:, source:, path:).visit(tree)
 		end
 
-		Empirical::EvalProcessor.new(annotations:).visit(tree)
+		# At the same offset, closings come first, then plain edits, then openings. See BaseProcessor#wrap.
+		annotations = annotations.sort_by.with_index do |(offset, _, _, order), index|
+			[offset, *(order || [1, 0, 0]), index]
+		end
 
-		annotations.sort_by!(&:first)
-
-		buffer = +""
+		buffer = "".b
 		source_position = 0
 
 		annotations.each do |offset, length, string|
-			buffer << source.byteslice(source_position, offset - source_position)
-			buffer << string
+			raise "Overlapping annotations at byte #{offset}." if offset < source_position
+
+			buffer.append_as_bytes(source.byteslice(source_position, offset - source_position), string)
 			source_position = offset + length
 		end
 
-		buffer << source.byteslice(source_position, source.bytesize - source_position)
-		buffer
+		buffer.append_as_bytes(source.byteslice(source_position, source.bytesize - source_position))
+		buffer.force_encoding(result.encoding)
 	end
 
-	def self.generate_root_overloaded_method(owner, method_name)
-		visibility = if owner.public_instance_methods.include?(method_name)
-			:public
-		elsif owner.protected_instance_methods.include?(method_name)
-			:protected
-		elsif owner.private_instance_methods.include?(method_name)
-			:private
-		else
-			raise "No existing definition for the method #{method_name}."
+	def self.declare_ivar_type(owner, ivar, type)
+		# Methods inherited from an ancestor check writes against the ancestor’s type.
+		owner.ancestors.each do |ancestor|
+			next if ancestor.equal?(owner)
+
+			declared = IVAR_TYPE[ancestor]
+
+			if declared&.key?(ivar) && declared[ivar] != type
+				raise ArgumentError, "#{ivar} is already declared on #{ancestor.inspect} with a different type. A subclass can’t change the type of an inherited prop."
+			end
 		end
 
-		owner.module_eval <<~RUBY
-			#{visibility} def #{method_name}(*args, **kwargs, &block)
-				::Empirical::OVERLOADED_METHODS[self.method(:#{method_name}).owner][:#{method_name}].reverse_each do |sig|
-					if sig.positional_params_type === args && sig.keyword_params_type === kwargs
-						return sig.method.bind_call(self, *args, **kwargs, &block)
-					end
-				end
+		(IVAR_TYPE[owner] ||= {})[ivar] = type
+		INHERITED_IVAR_TYPES.clear
+	end
 
-				raise NoMatchingPatternError
+	# For internal use only. Returns the value, or raises if the ivar isn’t declared or the value doesn’t match its type.
+	def self.__check_ivar__(object, name, value)
+		# `object.class` is several times faster than binding Kernel#class, but it can be overridden,
+		# so it’s only trusted to accept a write. Anything else is checked again against the real class.
+		if Object === object
+			types = INHERITED_IVAR_TYPES[object.class]
+			return value if types&.key?(name) && types[name] === value
+		end
+
+		# The ivars of a class or module itself are declared on its singleton class.
+		owner = (Module === object) ? SINGLETON_CLASS_METHOD.bind_call(object) : CLASS_METHOD.bind_call(object)
+
+		type = ivar_types_for(owner).fetch(name) do
+			raise UndeclaredInstanceVariableError.new(object, name)
+		end
+
+		raise TypeError.ivar_type_error(name:, value:, expected: type, context: object) unless type === value
+
+		value
+	end
+
+	# For internal use only. Takes what `attr_writer` or `attr_accessor` returned and redefines the writers
+	# so they type check, keeping their visibility.
+	def self.__check_writers__(owner, method_names)
+		method_names.each do |method_name|
+			next unless method_name.end_with?("=")
+
+			ivar = "@#{method_name.name.delete_suffix('=')}"
+
+			visibility = if PRIVATE_METHOD_DEFINED_METHOD.bind_call(owner, method_name)
+				PRIVATE_METHOD
+			elsif PROTECTED_METHOD_DEFINED_METHOD.bind_call(owner, method_name)
+				PROTECTED_METHOD
+			else
+				PUBLIC_METHOD
 			end
-		RUBY
+
+			MODULE_EVAL_METHOD.bind_call(owner, <<~RUBY, __FILE__, __LINE__ + 1)
+				def #{method_name}(value)
+					#{ivar} = ::Empirical.__check_ivar__(self, :#{ivar}, value)
+				end
+			RUBY
+
+			visibility.bind_call(owner, method_name)
+		end
+
+		method_names
+	end
+
+	# The ivar types declared on a class and its ancestors.
+	private_class_method def self.ivar_types_for(owner)
+		INHERITED_IVAR_TYPES[owner] ||= owner.ancestors.reverse_each.with_object({}) do |ancestor, types|
+			declared = IVAR_TYPE[ancestor]
+			types.merge!(declared) if declared
+		end
 	end
 end
 
 class Object
 	include Literal::Types
-
-	def overload(method_name)
-		method_name
-	end
 end
 
 Empirical::CLASS_METHOD = Object.instance_method(:class)
+Empirical::SINGLETON_CLASS_METHOD = Object.instance_method(:singleton_class)
 Empirical::INSTANCE_VARIABLE_SET_METHOD = Object.instance_method(:instance_variable_set)
 Empirical::INSTANCE_VARIABLE_GET_METHOD = Object.instance_method(:instance_variable_get)
 Empirical::DEFINE_METHOD_METHOD = Module.instance_method(:define_method)
 Empirical::ATTR_READER_METHOD = Module.instance_method(:attr_reader)
+Empirical::MODULE_EVAL_METHOD = Module.instance_method(:module_eval)
+Empirical::PRIVATE_METHOD_DEFINED_METHOD = Module.instance_method(:private_method_defined?)
+Empirical::PROTECTED_METHOD_DEFINED_METHOD = Module.instance_method(:protected_method_defined?)
+Empirical::PUBLIC_METHOD = Module.instance_method(:public)
+Empirical::PROTECTED_METHOD = Module.instance_method(:protected)
+Empirical::PRIVATE_METHOD = Module.instance_method(:private)
 
-class BasicObject
-	def self.prop(name, type, reader: nil, writer: nil, predicate: nil)
+class Module
+	def prop(name, type, reader: nil, writer: nil, predicate: nil)
 		raise ArgumentError unless reader    in nil | :public | :protected | :private
 		raise ArgumentError unless writer    in nil | :public | :protected | :private
 		raise ArgumentError unless predicate in nil | :public | :protected | :private
 
 		ivar = :"@#{name}"
 
-		(::Empirical::IVAR_TYPE[self] ||= {})[:"@#{name}"] = type
+		::Empirical.declare_ivar_type(self, ivar, type)
 
 		if reader
 			::Empirical::ATTR_READER_METHOD.bind_call(self, name)
@@ -160,7 +223,7 @@ class BasicObject
 			writer_method_name = :"#{name}="
 
 			::Empirical::DEFINE_METHOD_METHOD.bind_call(self, writer_method_name) do |value|
-				::Empirical::SET_IVAR_METHOD.bind_call(self, ivar, value)
+				::Empirical::INSTANCE_VARIABLE_SET_METHOD.bind_call(self, ivar, ::Empirical.__check_ivar__(self, ivar, value))
 			end
 
 			__send__ writer, writer_method_name
@@ -170,18 +233,10 @@ class BasicObject
 			predicate_method_name = :"#{name}?"
 
 			::Empirical::DEFINE_METHOD_METHOD.bind_call(self, predicate_method_name) do
-				!!::Empirical::INSTANCE_VARIABLE_GET_METHOD.bind_call(self, name)
+				!!::Empirical::INSTANCE_VARIABLE_GET_METHOD.bind_call(self, ivar)
 			end
-		end
-	end
 
-	def __set_ivar_method__(name, value)
-		if (map = ::Empirical::IVAR_TYPE[::Empirical::CLASS_METHOD.bind_call(self)]) && !(map[name] === value)
-			raise ::TypeError
+			__send__ predicate, predicate_method_name
 		end
-
-		::Empirical::INSTANCE_VARIABLE_SET_METHOD.bind_call(self, name, value)
 	end
 end
-
-Empirical::SET_IVAR_METHOD = BasicObject.instance_method(:__set_ivar_method__)

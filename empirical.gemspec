@@ -12,7 +12,7 @@ Gem::Specification.new do |spec|
 	spec.description = "Based on, concerned with, or verifiable by observation or experience rather than theory or pure logic."
 	spec.homepage = "https://github.com/yippee-fun/empirical"
 	spec.license = "MIT"
-	spec.required_ruby_version = ">= 3.1"
+	spec.required_ruby_version = ">= 3.4"
 
 	spec.metadata["homepage_uri"] = spec.homepage
 	spec.metadata["source_code_uri"] = "https://github.com/yippee-fun/empirical"
@@ -21,7 +21,8 @@ Gem::Specification.new do |spec|
 	spec.files = Dir[
 		"README.md",
 		"LICENSE.txt",
-		"lib/**/*.rb"
+		"lib/**/*.rb",
+		"lib/**/*.yml"
 	]
 
 	spec.require_paths = ["lib"]

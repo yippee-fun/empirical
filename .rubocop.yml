@@ -12,3 +12,8 @@ Lint/EmptyFile:
 
 Layout/SpaceAroundMethodCallOperator:
   Enabled: false
+
+Style/RescueModifier:
+  Exclude:
+    - "test/ivar_guards.test.rb"
+    - "test/prop_signatures.test.rb"
