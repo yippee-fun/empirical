@@ -90,6 +90,55 @@ test "a return in a lambda isn’t the method’s return" do
 	RUBY
 end
 
+test "a return in an ensure replaces the body’s value" do
+	assert_equal static_error(<<~RUBY), nil
+		fun answer => String do
+			1
+		ensure
+			return "ok" if true
+		end
+	RUBY
+end
+
+test "a nested fun’s returns belong to it" do
+	assert_equal static_error(<<~RUBY), nil
+		fun outer => String do
+			fun inner => Integer do
+				return 1 if true
+				2
+			end
+
+			private fun hidden => Integer do
+				return 3 if true
+				4
+			end
+
+			"ok"
+		end
+	RUBY
+end
+
+test "a return inside defined? never runs" do
+	assert_equal static_error(<<~RUBY), nil
+		fun answer => String do
+			defined?(return 1)
+			"ok"
+		end
+	RUBY
+end
+
+test "a class with its own === isn’t compared by ancestry" do
+	assert_equal static_error(<<~RUBY), nil
+		class Stringish
+			def self.===(value) = String === value
+		end
+
+		fun answer(value = Stringish) => String do
+			value
+		end
+	RUBY
+end
+
 test "a literal default of the wrong type" do
 	message = static_error(<<~RUBY)
 		fun repeat(text = String, count: Integer) => String do |count: "twice"|

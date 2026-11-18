@@ -74,6 +74,9 @@ class Empirical::FunChecker
 		in Prism::ElseNode
 			tails(node.statements)
 		in Prism::BeginNode
+			# A `return` in an `ensure` replaces whatever the body evaluated to.
+			return [] if explicit_returns(node.ensure_clause).any?
+
 			[*tails(node.else_clause || node.statements), *(tails(node.rescue_clause) if node.rescue_clause)]
 		in Prism::RescueNode
 			[*tails(node.statements), *(tails(node.subsequent) if node.subsequent)]
@@ -89,6 +92,10 @@ class Empirical::FunChecker
 		case node
 		in nil | Prism::DefNode | Prism::LambdaNode | Prism::ClassNode | Prism::ModuleNode | Prism::SingletonClassNode
 			# returns in here belong to something else
+		in Prism::DefinedNode
+			# never evaluated
+		in Prism::CallNode[block: Prism::BlockNode] if defines_fun?(node)
+			# a nested fun has its own returns
 		in Prism::CallNode[name:, block: Prism::BlockNode] if NEW_RETURN_SCOPES.include?(name)
 			explicit_returns(node.receiver, found)
 			explicit_returns(node.arguments, found)
@@ -106,6 +113,21 @@ class Empirical::FunChecker
 		end
 
 		found
+	end
+
+	# True for `fun ... do` and for calls that wrap one, like `private fun ... do`, where Ruby gives
+	# the block to the outer call.
+	private def defines_fun?(node)
+		loop do
+			return true if node.name == :fun && node.receiver.nil?
+
+			case node.arguments&.arguments
+			in [Prism::CallNode => node]
+				# keep unwrapping
+			else
+				return false
+			end
+		end
 	end
 
 	# Typed parameters that the body never assigns to or shadows, so they still hold what was passed.

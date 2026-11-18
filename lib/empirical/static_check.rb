@@ -44,6 +44,9 @@ module Empirical::StaticCheck
 		in nil | true | false
 			[[:value, type]]
 		in Class
+			# A class that defines its own `===` can match things that aren’t its instances.
+			return unless Empirical::METHOD_METHOD.bind_call(type, :===).owner.equal?(Module)
+
 			[[:class, type]]
 		in Literal::Types::BooleanType
 			[[:value, true], [:value, false]]
