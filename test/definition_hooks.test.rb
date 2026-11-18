@@ -156,21 +156,86 @@ test "generated code keeps every line in place" do
 	RUBY
 
 	processed = Empirical.process(source, with: Empirical::DefinitionHooksProcessor)
+	block_closing = ";end;rescue ::Exception;__failed__ = true;::Kernel.raise;ensure;::Empirical.__closed__(self) if !__failed__ && ::Module === self;end;"
 
 	assert_equal processed.lines.size, source.lines.size
-	assert_equal_ruby processed, <<~RUBY
-		class Example < Base;__empirical_body_20__ = begin;
+	assert_equal_ruby processed.gsub(/__empirical_(body|failed)_\d+__/, '__\1__'), <<~RUBY
+		class Example < Base;__body__ = begin;
 			def call
 				__LINE__
 			end
 		rescue
 			nil
-		;end;::Empirical.__closed__(self);__empirical_body_20__;end
+		;end;::Empirical.__closed__(self, __FILE__, 1);__body__;end
 
-		module Helpers;__empirical_body_78__ = begin;; ;end;::Empirical.__closed__(self);__empirical_body_78__;end
-		Class.new { begin; foo ;end;::Empirical.__closed__(self);}
-		Module.new do |mod| begin;
+		module Helpers;__body__ = begin;; ;end;::Empirical.__closed__(self, __FILE__, 9);__body__;end
+		Class.new { begin;begin; foo #{block_closing}}
+		Module.new do |mod| begin;begin;
 			bar
-		;end;::Empirical.__closed__(self);end
+		#{block_closing}end
 	RUBY
+end
+
+test "the hook runs when a Class.new block is left early with next" do
+	log = []
+
+	base = Class.new do
+		define_singleton_method(:defined) { log << instance_methods(false) }
+	end
+
+	Class.new(base) do
+		def early = 1
+		next if true
+		def late = 2
+	end
+
+	assert_equal log, [[], [:early]]
+end
+
+test "a shadowed Class constant isn’t treated as a class definition" do
+	namespace = Module.new
+
+	result = namespace.module_eval <<~RUBY
+		class Class
+			def self.new(&block) = "not a module".instance_eval(&block)
+		end
+
+		Class.new { upcase }
+	RUBY
+
+	assert_equal result, "NOT A MODULE"
+end
+
+test "reopening a class that was defined elsewhere fires reopened" do
+	log = []
+
+	preexisting = ::Class.new
+	preexisting.define_singleton_method(:defined) { log << :defined }
+	preexisting.define_singleton_method(:reopened) { log << :reopened }
+
+	Object.const_set(:EmpiricalPreexistingExample, preexisting)
+	Object.class_eval("class EmpiricalPreexistingExample; end")
+	Object.class_eval("class String; end")
+
+	assert_equal log, [:reopened]
+ensure
+	Object.__send__(:remove_const, :EmpiricalPreexistingExample)
+end
+
+test "a new top-level class fires defined" do
+	$empirical_fresh_log = []
+
+	Object.class_eval <<~RUBY
+		class EmpiricalFreshExample
+			def self.defined = $empirical_fresh_log << :defined
+			def self.reopened = $empirical_fresh_log << :reopened
+		end
+
+		class EmpiricalFreshExample
+		end
+	RUBY
+
+	assert_equal $empirical_fresh_log, [:defined, :reopened]
+ensure
+	Object.__send__(:remove_const, :EmpiricalFreshExample)
 end

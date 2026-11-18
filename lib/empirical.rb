@@ -184,7 +184,7 @@ module Empirical
 	end
 
 	# For internal use only. Called at the end of every class and module body in an included file.
-	def self.__closed__(owner)
+	def self.__closed__(owner, path = nil, line = nil)
 		hook = CLOSED_MUTEX.synchronize do
 			if CLOSED_MODULES[owner]
 				:reopened
@@ -194,6 +194,8 @@ module Empirical
 
 				if name.nil?
 					:defined
+				elsif path && defined_elsewhere?(name, path, line)
+					:reopened
 				elsif CLOSED_MODULE_NAMES.key?(name)
 					:redefined
 				else
@@ -207,6 +209,16 @@ module Empirical
 		INHERITED_IVAR_TYPES.clear
 
 		SEND_METHOD.bind_call(owner, hook)
+	end
+
+	# True when the constant was first defined somewhere other than the body that just closed, such as
+	# a library class or one loaded before Empirical.init.
+	private_class_method def self.defined_elsewhere?(name, path, line)
+		location = CONST_SOURCE_LOCATION_METHOD.bind_call(Object, name)
+
+		!location.nil? && location != [path, line]
+	rescue ::NameError
+		false
 	end
 
 	# The ivar types declared on a class and its ancestors, by Empirical’s `prop` or Literal’s.
@@ -241,6 +253,7 @@ Empirical::PUBLIC_METHOD = Module.instance_method(:public)
 Empirical::PROTECTED_METHOD = Module.instance_method(:protected)
 Empirical::PRIVATE_METHOD = Module.instance_method(:private)
 Empirical::NAME_METHOD = Module.instance_method(:name)
+Empirical::CONST_SOURCE_LOCATION_METHOD = Module.instance_method(:const_source_location)
 Empirical::SEND_METHOD = BasicObject.instance_method(:__send__)
 Empirical::EQUAL_METHOD = BasicObject.instance_method(:equal?)
 

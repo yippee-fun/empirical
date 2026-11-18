@@ -284,6 +284,8 @@ end # Model.defined runs here, with User as self
 
 They also run at the end of `Class.new do ... end` and `Module.new do ... end`.
 
+Reopening a class that was defined somewhere Empirical didn’t see, such as a library class, counts as `reopened`.
+
 The hooks only run for class and module bodies in the files you include, and they don’t run if the body raises.
 
 ## How it works
