@@ -11,6 +11,7 @@ class Empirical::Configuration
 	def include(*patterns)
 		@mutex.synchronize do
 			@include.concat(patterns)
+			@cache_key = nil
 		end
 	end
 
@@ -18,6 +19,14 @@ class Empirical::Configuration
 	def exclude(*patterns)
 		@mutex.synchronize do
 			@exclude.concat(patterns)
+			@cache_key = nil
+		end
+	end
+
+	#: () -> String
+	def cache_key
+		@mutex.synchronize do
+			@cache_key ||= [@include, @exclude].inspect.freeze
 		end
 	end
 

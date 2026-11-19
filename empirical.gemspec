@@ -29,7 +29,7 @@ Gem::Specification.new do |spec|
 
 	spec.metadata["rubygems_mfa_required"] = "true"
 
-	spec.add_dependency "require-hooks", "~> 0.2"
+	spec.add_dependency "require-hooks", "~> 0.5", ">= 0.5.1"
 	spec.add_dependency "prism"
 	spec.add_dependency "literal"
 end
