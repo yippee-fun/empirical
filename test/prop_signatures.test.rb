@@ -34,6 +34,18 @@ class User
 		@name, @admin = name, admin
 	end
 
+	def nested_multi_write(name, admin)
+		(@name, @admin), @number = [name, admin], 1
+	end
+
+	def implicit_rest_multi_write(name)
+		@name, = name, nil
+	end
+
+	def splat_multi_write(*names)
+		@name, *@tags = *names
+	end
+
 	def in_a_block(value)
 		[value].each { |item| @name = item }
 	end
@@ -213,6 +225,30 @@ test "multiple assignment is checked" do
 
 	assert_raises Empirical::TypeError do
 		User.new.multi_write("Joel", 1)
+	end
+end
+
+test "nested targets in a multiple assignment are checked" do
+	User.new.nested_multi_write("Joel", true)
+
+	assert_raises Empirical::TypeError do
+		User.new.nested_multi_write("Joel", 1)
+	end
+end
+
+test "a multiple assignment with an implicit rest is checked" do
+	User.new.implicit_rest_multi_write("Joel")
+
+	assert_raises Empirical::TypeError do
+		User.new.implicit_rest_multi_write(1)
+	end
+end
+
+test "a splat target in a multiple assignment is checked" do
+	User.new.splat_multi_write("Joel", "a")
+
+	assert_raises Empirical::TypeError do
+		User.new.splat_multi_write("Joel", 1)
 	end
 end
 
