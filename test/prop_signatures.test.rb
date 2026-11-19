@@ -1,13 +1,13 @@
 # frozen_string_literal: true
 
 class User
-	prop :name, String, reader: :public, writer: :public
-	prop :admin, _Boolean, predicate: :public
-	prop :secret, String, reader: :private, predicate: :private
-	prop :tags, _Array(String)
-	prop :pair, Array
-	prop :list, Array
-	prop :number, Integer
+	has name: String, admin: _Boolean
+	has tags: _Array(String)
+	has pair: Array
+	has list: Array
+	has number: Integer
+
+	attr_accessor :name
 
 	def good
 		@name = "Hello"
@@ -72,8 +72,8 @@ class User
 end
 
 class Swapper
-	prop :first, String
-	prop :second, String
+	has first: String
+	has second: String
 
 	def call
 		kept = (@first = "a")
@@ -109,7 +109,7 @@ test "writing an undeclared ivar raises" do
 	end
 
 	assert error.message.include?("Undeclared instance variable `@other` on an instance of")
-	assert error.message.include?("Declare it with `prop :other, Type`.")
+	assert error.message.include?("Declare it with `has other: Type`.")
 end
 
 test "writing an undeclared ivar raises in a class with no props" do
@@ -124,7 +124,7 @@ end
 
 test "objects that override #class are still checked against their real class" do
 	klass = Class.new do
-		prop :name, String
+		has name: String
 
 		def class = Integer
 		def set(value) = tap { @name = value }
@@ -139,7 +139,7 @@ end
 
 test "modules declare the ivars they write" do
 	mod = Module.new do
-		prop :count, Integer
+		has count: Integer
 
 		def increment = @count = (defined?(@count) ? @count : 0) + 1
 	end
@@ -152,7 +152,7 @@ end
 test "class-level ivars are declared on the singleton class" do
 	klass = Class.new do
 		class << self
-			prop :registry, Hash
+			has registry: Hash
 		end
 
 		@registry = {}
@@ -173,7 +173,7 @@ test "class-level ivars are declared on the singleton class" do
 		klass.undeclared
 	end
 
-	assert error.message.include?("Declare it with `class << self; prop :other, Type; end`.")
+	assert error.message.include?("Declare it with `class << self; has other: Type; end`.")
 
 	assert_raises Empirical::TypeError do
 		klass.wrong
@@ -188,20 +188,6 @@ test "generated writer/reader" do
 	assert_raises Empirical::TypeError do
 		user.name = 1
 	end
-end
-
-test "predicate" do
-	user = User.new
-	refute user.admin?
-
-	user.promote
-	assert user.admin?
-end
-
-test "visibility" do
-	assert User.private_instance_methods(false).include?(:secret)
-	assert User.private_instance_methods(false).include?(:secret?)
-	assert User.public_instance_methods(false).include?(:admin?)
 end
 
 test "||= is checked" do
@@ -268,23 +254,83 @@ test "props are inherited" do
 	end
 end
 
-test "a subclass can’t change the type of an inherited prop" do
+test "a subclass can’t change an inherited ivar to a type that isn’t a subtype" do
 	error = assert_raises ArgumentError do
-		Class.new(User) { prop :name, Integer }
+		Class.new(User) { has name: Integer }
 	end
 
-	assert error.message.include?("@name is already declared on")
-	assert error.message.include?("with a different type")
+	assert error.message.include?("User as String, and Integer isn’t a subtype of it.")
 
 	refute_raises do
-		Class.new(User) { prop :name, String }
+		Class.new(User) { has name: String }
+	end
+end
+
+class Vehicle
+	has wheels: Numeric
+
+	def fit(wheels)
+		@wheels = wheels
+	end
+end
+
+class Car < Vehicle
+	has wheels: Integer
+end
+
+test "a subclass can narrow an inherited ivar to a subtype" do
+	assert_equal Car.new.fit(4), 4
+	assert_equal Vehicle.new.fit(4.5), 4.5
+end
+
+test "the parent’s methods check a narrowed ivar against the subclass" do
+	assert_raises Empirical::TypeError do
+		Car.new.fit(4.5)
+	end
+end
+
+class Account
+	has balance: Numeric
+
+	def deposit(balance)
+		@balance = balance
+	end
+end
+
+class Account
+	has balance: Numeric
+
+	def withdraw(balance)
+		@balance = balance
+	end
+end
+
+class Wallet < Account
+	has balance: Integer
+end
+
+class Account
+	has balance: Numeric
+end
+
+test "narrowing covers every body of a reopened parent, and survives the parent declaring again" do
+	assert_raises(Empirical::TypeError) { Wallet.new.deposit(1.5) }
+	assert_raises(Empirical::TypeError) { Wallet.new.withdraw(1.5) }
+	assert_equal Account.new.deposit(1.5), 1.5
+end
+
+test "an inherited nil type can only narrow to nil" do
+	parent = Class.new { has nothing: nil }
+
+	assert_raises ArgumentError do
+		Class.new(parent) { has nothing: String }
 	end
 end
 
 test "falsy types are still checked" do
 	klass = Class.new do
-		prop :nothing, nil, writer: :public
-		prop :off, false, writer: :public
+		has nothing: nil, off: false
+		attr_writer :nothing, :off
 	end
 
 	object = klass.new
@@ -314,7 +360,7 @@ test "inline checks don’t share a temporary" do
 
 	processed = Empirical.process(<<~RUBY, with: Empirical::IvarProcessor)
 		class Example
-			prop :name, String
+			has name: String
 
 			def call
 				@name = "a"
@@ -329,7 +375,7 @@ end
 test "writes to a prop in its own class are checked inline" do
 	processed = Empirical.process(<<~RUBY, with: Empirical::IvarProcessor)
 		class Example
-			prop :name, String
+			has name: String
 
 			def a = @name = "a"
 			def b = @other = "b"
@@ -340,9 +386,9 @@ test "writes to a prop in its own class are checked inline" do
 
 	lines = processed.lines
 
-	assert lines[1].start_with?("\tprop :name, ::Empirical::StaticCheck.after(::Empirical::TypeStore.store(")
+	assert lines[1].start_with?("\thas name: ::Empirical::StaticCheck.after(::Empirical::TypeStore.store(")
 	assert lines[1].include?(%[("a"), __FILE__, 4, "`@name` is assigned")])
-	refute lines[3].include?("__check_ivar__")
+	refute lines[3].include?("= ::Empirical.__check_ivar__(")
 	assert lines[3].include?("::Empirical::TypeStore::T_")
 	assert lines[4].include?("@other = ::Empirical.__check_ivar__(self, :@other, (\"b\"))")
 	assert lines[5].include?("__check_ivar__")

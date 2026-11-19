@@ -20,7 +20,7 @@ module Empirical::StaticCheck
 	# Otherwise it could still fit at runtime (a Numeric that happens to be an Integer), so this only
 	# raises when no value of the one type could ever match the other.
 	def type(expected, actual, file, line, description)
-		# A prop declared further down the class hasn’t been stored yet.
+		# An ivar declared further down the class hasn’t been stored yet.
 		return if Empirical::TypeStore::MISSING.equal?(expected) || Empirical::TypeStore::MISSING.equal?(actual)
 		return if Literal.subtype?(actual, expected)
 		return unless disjoint?(expected, actual)

@@ -6,35 +6,35 @@
 # or write must have run. Those don’t need another guard. Anything that might not run (a branch, a loop
 # body, the right of `&&`) is visited with a copy of the context that is thrown away afterwards.
 #
-# Writes: when the ivar has a `prop` in the same class body and the write is directly in an instance
+# Writes: when the ivar is declared in the same class body and the write is directly in an instance
 # method, the check is inlined. Every other write is checked at runtime by `Empirical.__check_ivar__`.
 class Empirical::IvarProcessor < Empirical::BaseProcessor
 	WRITER_MACROS = Set[:attr_writer, :attr_accessor].freeze
 
 	def initialize(...)
 		super
-		@props = {}
+		@declared_types = {}
 		@static_checks = []
 		@inline = false
 		@fun_bodies = {}.compare_by_identity
 	end
 
 	def visit_class_node(node)
-		declarations = prop_declarations_in(node.body)
-		props = declarations.to_h { |ivar, _type, ident| [ivar, "::Empirical::TypeStore::#{ident}"] }
+		declarations = declarations_in(node.body)
+		declared_types = declarations.to_h { |ivar, _type, ident| [ivar, "::Empirical::TypeStore::#{ident}"] }
 		static_checks = []
 
-		with_props(props, static_checks) { new_context { super } }
+		with_declared_types(declared_types, static_checks) { new_context { super } }
 
-		store_prop_types(declarations, static_checks)
+		store_declared_types(declarations, static_checks)
 	end
 
 	def visit_module_node(node)
-		with_props({}) { new_context { super } }
+		with_declared_types({}) { new_context { super } }
 	end
 
 	def visit_singleton_class_node(node)
-		with_props({}) { new_context { super } }
+		with_declared_types({}) { new_context { super } }
 	end
 
 	def visit_def_node(node)
@@ -271,7 +271,7 @@ class Empirical::IvarProcessor < Empirical::BaseProcessor
 
 			[
 				"(#{type} === (#{local} = ",
-				") ? #{local} : ::Kernel.raise(::Empirical::TypeError.ivar_type_error(name: :#{name}, value: #{local}, expected: #{type}, context: self)))",
+				") ? #{local} : ::Empirical::TypeStore::Narrowed.equal?(#{type}) ? ::Empirical.__check_ivar__(self, :#{name}, #{local}) : ::Kernel.raise(::Empirical::TypeError.ivar_type_error(name: :#{name}, value: #{local}, expected: #{type}, context: self)))",
 			]
 		else
 			["::Empirical.__check_ivar__(self, :#{name}, ", ")"]
@@ -292,20 +292,20 @@ class Empirical::IvarProcessor < Empirical::BaseProcessor
 	end
 
 	private def inline_type(name)
-		@props[name] if @inline
+		@declared_types[name] if @inline
 	end
 
-	# Stores each prop’s type so writes can check against it inline. The static checks found in the
-	# class run as the last prop is declared, once every type they mention has been stored.
-	private def store_prop_types(declarations, static_checks)
-		declarations.each_with_index do |(_ivar, type, ident), index|
+	# Stores each declared type so writes can check against it inline. The static checks found in the
+	# class run as the last ivar is declared, once every type they mention has been stored.
+	private def store_declared_types(declarations, static_checks)
+		declarations.each_with_index do |(ivar, type, ident), index|
 			location = type.location
 
 			if static_checks.any? && index == declarations.size - 1
 				wrap(location.start_offset, location.end_offset, "::Empirical::StaticCheck.after(", ") { #{static_checks.join(';')} }")
 			end
 
-			wrap(location.start_offset, location.end_offset, "::Empirical::TypeStore.store(:#{ident}, (", "))")
+			wrap(location.start_offset, location.end_offset, "::Empirical::TypeStore.store(:#{ident}, (", "), self, :#{ivar})")
 		end
 	end
 
@@ -334,14 +334,14 @@ class Empirical::IvarProcessor < Empirical::BaseProcessor
 		end
 	end
 
-	private def with_props(props, static_checks = [])
-		original_props = @props
+	private def with_declared_types(declared_types, static_checks = [])
+		original_declared_types = @declared_types
 		original_static_checks = @static_checks
-		@props = props
+		@declared_types = declared_types
 		@static_checks = static_checks
 		with_inline(false) { yield }
 	ensure
-		@props = original_props
+		@declared_types = original_declared_types
 		@static_checks = original_static_checks
 	end
 

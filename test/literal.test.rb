@@ -113,11 +113,16 @@ test "a prop added when a class is reopened is recognised" do
 	assert_equal namespace::Reopened.new.set_second(1).second, 1
 end
 
-test "Empirical’s prop takes the same accessor options as Literal’s" do
-	klass = Class.new do
-		prop :name, String, reader: :public, writer: false, predicate: false
-	end
+test "a subclass can narrow an inherited Literal prop to a subtype" do
+	parent = Class.new(Literal::Object) { prop :amount, Numeric, reader: :public }
 
-	assert klass.public_method_defined?(:name)
-	refute klass.method_defined?(:name=)
+	assert_equal Class.new(parent) { prop :amount, Integer }.new(amount: 1).amount, 1
+
+	assert_raises ArgumentError do
+		Class.new(parent) { prop :amount, String }
+	end
+end
+
+test "a class without Literal has no prop" do
+	refute Class.new.respond_to?(:prop, true)
 end

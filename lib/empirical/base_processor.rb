@@ -61,19 +61,35 @@ class Empirical::BaseProcessor < Prism::Visitor
 		end
 	end
 
-	# Finds the `prop :name, Type` calls in a class body, as [ivar, type node, stored type name].
-	private def prop_declarations_in(body)
+	# Finds the ivars a class body declares with `has name: Type` or Literal’s `prop :name, Type`,
+	# as [ivar, type node, stored type name].
+	private def declarations_in(body)
 		statements = (Prism::StatementsNode === body) ? body.body : []
 
-		statements.filter_map do |statement|
-			next unless statement in Prism::CallNode[
+		statements.flat_map do |statement|
+			case statement
+			in Prism::CallNode[
+				name: :has,
+				receiver: nil,
+				arguments: Prism::ArgumentsNode[arguments: [Prism::KeywordHashNode[elements:]]]
+			]
+				elements.filter_map do |element|
+					declaration(element.key, element.value) if element in Prism::AssocNode[key: Prism::SymbolNode]
+				end
+			in Prism::CallNode[
 				name: :prop,
 				receiver: nil,
 				arguments: Prism::ArgumentsNode[arguments: [Prism::SymbolNode => name, type, *]]
 			]
-
-			[:"@#{name.unescaped}", type, "T_#{site}_#{type.location.start_offset}"]
+				[declaration(name, type)]
+			else
+				[]
+			end
 		end
+	end
+
+	private def declaration(name, type)
+		[:"@#{name.unescaped}", type, "T_#{site}_#{type.location.start_offset}"]
 	end
 
 	# Identifies this file in the names of stored types, so the same source always generates the same code.

@@ -43,10 +43,10 @@ class Empirical::SignatureProcessor < Empirical::BaseProcessor
 		with_return_scope(nil) { super }
 	end
 
-	# The props of the class a fun is written in give its ivars a known type. They are looked up by
-	# name when the fun is defined, since a prop below it in the class won’t have been stored yet.
+	# The ivars declared in the class a fun is written in have a known type. They are looked up by
+	# name when the fun is defined, since a declaration below it in the class won’t have been stored yet.
 	def visit_class_node(node)
-		ivar_types = prop_declarations_in(node.body).to_h do |ivar, _type, ident|
+		ivar_types = declarations_in(node.body).to_h do |ivar, _type, ident|
 			[ivar, "::Empirical::TypeStore.lookup(:#{ident})"]
 		end
 

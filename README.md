@@ -21,7 +21,7 @@ It gives you four things in the files you opt in:
 
 1. [Typed methods](#typed-methods) with `fun`.
 2. [Strict instance variables](#strict-instance-variables): reading an undefined ivar raises instead of returning `nil`.
-3. [Typed instance variables](#typed-instance-variables): every ivar you write is declared with `prop` and checked.
+3. [Typed instance variables](#typed-instance-variables): every ivar you write is declared with `has` and checked.
 4. [Definition hooks](#definition-hooks): `defined`, `reopened` and `redefined` run when a class body closes.
 
 Types are [Literal](https://literal.fun) types. Anything that responds to `===` works: classes, ranges, procs, and Literal’s generics like `_Array(String)` or `_Nilable(Integer)`.
@@ -190,12 +190,13 @@ end
 
 ## Typed instance variables
 
-Every instance variable your code writes must be declared with `prop`, which gives it a type. Every write is checked, wherever it happens: in the class, in a subclass, or through a writer.
+Every instance variable your code writes must be declared with `has`, which gives it a type. Every write is checked, wherever it happens: in the class, in a subclass, or through a writer.
 
 ```ruby
 class User
-  prop :name, String, reader: :public, writer: :public
-  prop :admin, _Boolean, predicate: :public
+  has name: String, admin: _Boolean
+
+  attr_reader :name
 
   def initialize(name)
     @name = name   # checked
@@ -206,13 +207,13 @@ end
 User.new(1) # Empirical::TypeError: Instance variable @name assigned the wrong type.
 ```
 
-`reader:`, `writer:` and `predicate:` each take `:public`, `:protected` or `:private`.
+`has` only declares. Use `attr_reader`, `attr_writer` and `attr_accessor` for accessors; writers are checked too.
 
 Writing an ivar that hasn’t been declared raises an `Empirical::UndeclaredInstanceVariableError`, which also catches typos.
 
 ```ruby
 def rename(name)
-  @nmae = name # Undeclared instance variable `@nmae` on an instance of User. Declare it with `prop :nmae, Type`.
+  @nmae = name # Undeclared instance variable `@nmae` on an instance of User. Declare it with `has nmae: Type`.
 end
 ```
 
@@ -221,51 +222,41 @@ This applies to your code, in the files you include. Libraries can still set wha
 If you don’t want to constrain an ivar, declare it as `_Any?`. Literal’s `_Any` is anything except `nil`.
 
 ```ruby
-prop :cache, _Any?
+has cache: _Any?
 ```
 
-Modules declare the ivars they write in the same way. A subclass inherits its parent’s props and can’t change their types.
+Modules declare the ivars they write in the same way. A subclass inherits its parent’s declarations and can’t change their types.
 
 Ivars on a class or module itself are declared on its singleton class.
 
 ```ruby
 class Registry
   class << self
-    prop :entries, Hash
+    has entries: Hash
   end
 
   @entries = {}
 end
 ```
 
-`attr_writer` and `attr_accessor` are checked too, so you can keep using them alongside `prop`.
-
-```ruby
-class User
-  prop :name, String
-  attr_accessor :name
-end
-
-User.new.name = 1 # Empirical::TypeError
-```
-
 One gap: `instance_variable_set` writes the ivar directly and isn’t checked.
 
 ### With Literal
 
-Empirical’s `prop` declares an ivar and, if you ask, its accessors. You still write `initialize` yourself.
-
-Literal’s `prop` takes the same arguments and builds on them: in a `Literal::Struct`, `Literal::Data`, `Literal::Object`, or any class that extends `Literal::Properties`, it also generates the initializer. Empirical treats those props as declared, so writes inside your own methods are checked against the same types.
+Literal’s `prop` declares its ivar with `has`, then adds the initializer and any accessors. In a `Literal::Struct`, `Literal::Data`, `Literal::Object`, or any class that extends `Literal::Properties`, writes inside your own methods are checked against the prop’s type.
 
 ```ruby
 class Person < Literal::Struct
   prop :name, String
+  has nickname: _Nilable(String)
 
   def rename(name)
     @name = name # checked by Empirical
   end
 end
 ```
+
+Use `prop` for what the object is made from and `has` for state it keeps.
 
 ## Definition hooks
 
@@ -320,10 +311,10 @@ It checks a value whose type it can know from the source, wherever that value me
 |---|---|
 | A literal that is returned, including by an early `return` | The return type |
 | A literal default in the block parameters | The parameter’s type |
-| A literal written to an ivar in an instance method | The `prop` in the same class |
+| A literal written to an ivar in an instance method | The declaration in the same class |
 | A parameter that is returned and never reassigned | The return type |
 | A typed ivar that is returned | The return type |
-| A parameter or a typed ivar written to a typed ivar | The `prop` in the same class |
+| A parameter or a typed ivar written to a typed ivar | The declaration in the same class |
 
 Literals are checked with the real type, so this works for any type, such as `_Integer(1..)` or one of your own.
 
@@ -340,7 +331,7 @@ Ivars are checked the same way, because every ivar has a declared type:
 
 ```ruby
 class Counter
-  prop :count, Integer
+  has count: Integer
 
   fun label => String do
     @count

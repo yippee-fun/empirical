@@ -1,9 +1,9 @@
 # frozen_string_literal: true
 
 # Finds values in a fun whose type is known from the source alone and that flow into a declared
-# type. The known values are literals, parameters the body never reassigns, and ivars with a prop in
+# type. The known values are literals, parameters the body never reassigns, and declared ivars in
 # the same class. The declared types are the return type, parameter types (for defaults) and those
-# props. It produces statements that check them once, when the method is defined.
+# ivars. It produces statements that check them once, when the method is defined.
 class Empirical::FunChecker
 	NEW_RETURN_SCOPES = Set[:lambda, :define_method, :define_singleton_method].freeze
 

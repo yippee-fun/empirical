@@ -1,9 +1,9 @@
 # frozen_string_literal: true
 
 class Account
-	prop :name, String
-	prop :age, Integer
-	prop :notes, _Any
+	has name: String
+	has age: Integer
+	has notes: _Any
 
 	attr_writer :name
 	attr_accessor :age, :notes
@@ -14,12 +14,12 @@ class Account
 
 	attr_writer :secret
 
-	prop :token, String
-	prop :secret, String
+	has token: String
+	has secret: String
 end
 
 class SubAccount < Account
-	prop :level, Integer
+	has level: Integer
 
 	attr_accessor :level
 end

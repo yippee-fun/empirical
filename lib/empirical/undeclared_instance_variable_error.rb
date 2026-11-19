@@ -2,13 +2,13 @@
 
 class Empirical::UndeclaredInstanceVariableError < ::NameError
 	def initialize(object, name)
-		prop = "prop :#{name.name.delete_prefix('@')}, Type"
+		declaration = "has #{name.name.delete_prefix('@')}: Type"
 
 		if Module === object
-			super("Undeclared instance variable `#{name}` on #{object.inspect} itself. Declare it with `class << self; #{prop}; end`.")
+			super("Undeclared instance variable `#{name}` on #{object.inspect} itself. Declare it with `class << self; #{declaration}; end`.")
 		else
 			owner = Empirical::CLASS_METHOD.bind_call(object)
-			super("Undeclared instance variable `#{name}` on an instance of #{owner.inspect}. Declare it with `#{prop}`.")
+			super("Undeclared instance variable `#{name}` on an instance of #{owner.inspect}. Declare it with `#{declaration}`.")
 		end
 	end
 end
