@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class Empirical::Configuration
+	GLOB_FLAGS = File::FNM_PATHNAME | File::FNM_EXTGLOB
+
 	def initialize
 		@mutex = Mutex.new
 		@include = []
@@ -34,8 +36,8 @@ class Empirical::Configuration
 	def match?(path)
 		return false unless String === path
 		path = File.absolute_path(path)
-		return false if @exclude.any? { |pattern| File.fnmatch?(pattern, path) }
-		return true if @include.any? { |pattern| File.fnmatch?(pattern, path) }
+		return false if @exclude.any? { |pattern| File.fnmatch?(pattern, path, GLOB_FLAGS) }
+		return true if @include.any? { |pattern| File.fnmatch?(pattern, path, GLOB_FLAGS) }
 		false
 	end
 end
