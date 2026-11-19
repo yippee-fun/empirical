@@ -5,12 +5,12 @@ HOOK_LOG = []
 class HookedBase
 	def self.defined
 		super
-		HOOK_LOG << [:defined, name.split("::").last, instance_methods(false)]
+		HOOK_LOG << [:defined, name.split("::").last, instance_methods(false).sort]
 	end
 
 	def self.reopened
 		super
-		HOOK_LOG << [:reopened, name.split("::").last, instance_methods(false)]
+		HOOK_LOG << [:reopened, name.split("::").last, instance_methods(false).sort]
 	end
 end
 
@@ -24,7 +24,7 @@ end
 
 module HookedModule
 	def self.defined
-		HOOK_LOG << [:defined, name.split("::").last, instance_methods(false)]
+		HOOK_LOG << [:defined, name.split("::").last, instance_methods(false).sort]
 	end
 
 	def helper = 1
