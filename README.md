@@ -218,10 +218,10 @@ end
 
 This applies to your code, in the files you include. Libraries can still set whatever ivars they like on your objects.
 
-If you don’t want to constrain an ivar, declare it as `_Any`.
+If you don’t want to constrain an ivar, declare it as `_Any?`. Literal’s `_Any` is anything except `nil`.
 
 ```ruby
-prop :cache, _Any
+prop :cache, _Any?
 ```
 
 Modules declare the ivars they write in the same way. A subclass inherits its parent’s props and can’t change their types.
