@@ -112,9 +112,7 @@ class Empirical::IvarProcessor < Empirical::BaseProcessor
 
 	# `@a, @b = 1, 2` can’t be checked inline, so the ivars are checked straight after the assignment.
 	def visit_multi_write_node(node)
-		names = [*node.lefts, node.rest&.expression, *node.rights].filter_map do |target|
-			target.name if Prism::InstanceVariableTargetNode === target
-		end
+		names = ivar_targets(node)
 
 		if names.any?
 			offset = node.location.start_offset
@@ -277,6 +275,19 @@ class Empirical::IvarProcessor < Empirical::BaseProcessor
 			]
 		else
 			["::Empirical.__check_ivar__(self, :#{name}, ", ")"]
+		end
+	end
+
+	# The ivars a multiple assignment writes, including those in nested targets like `(@a, @b), c = ...`.
+	private def ivar_targets(node)
+		rest = node.rest.expression if Prism::SplatNode === node.rest
+
+		[*node.lefts, rest, *node.rights].flat_map do |target|
+			case target
+			in Prism::InstanceVariableTargetNode then target.name
+			in Prism::MultiTargetNode then ivar_targets(target)
+			else []
+			end
 		end
 	end
 
