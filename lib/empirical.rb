@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require "digest"
 require "prism"
 require "literal"
 require "empirical/version"
@@ -68,6 +69,10 @@ module Empirical
 		DefinitionHooksProcessor,
 	]
 
+	SOURCE_DIGEST = Dir[File.join(__dir__, "{empirical.rb,empirical/**/*.rb}")].each_with_object(Digest::SHA256.new) do |path, digest|
+		digest << File.binread(path)
+	end.hexdigest.freeze
+
 	TypedSignatureError = Class.new(SyntaxError)
 	NeverError = Class.new(RuntimeError)
 
@@ -96,6 +101,11 @@ module Empirical
 		return if @initialized
 		@initialized = true
 
+		# Bootsnap caches the transformed code, so its key has to change whenever the transform would.
+		if defined?(RequireHooks::Bootsnap)
+			RequireHooks::Bootsnap.add_version_hash { cache_key }
+		end
+
 		RequireHooks.source_transform(
 			patterns: EVERYTHING,
 			exclude_patterns: EMPTY_ARRAY
@@ -108,6 +118,11 @@ module Empirical
 				process(source, path:)
 			end
 		end
+	end
+
+	#: () -> String
+	def self.cache_key
+		"#{SOURCE_DIGEST}-#{Prism::VERSION}-#{CONFIG.cache_key}"
 	end
 
 	def self.process(source, with: [], path: nil)
