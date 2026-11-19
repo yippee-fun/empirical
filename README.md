@@ -42,7 +42,7 @@ Now the gem is installed, you should require and initialize the gem as early as 
 require "empirical"
 ```
 
-You can pass an array of globs to `Empirical.init` as `include:` and `exclude:`
+You can pass an array of globs to `Empirical.init` as `include:` and `exclude:`. They match as they would in `Dir.glob`, so `**/` matches any number of directories, including none.
 
 ```ruby
 Empirical.init(include: ["#{Dir.pwd}/**/*"], exclude: ["#{Dir.pwd}/vendor/**/*"])
