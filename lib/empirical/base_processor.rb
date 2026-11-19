@@ -61,7 +61,7 @@ class Empirical::BaseProcessor < Prism::Visitor
 		end
 	end
 
-	# Finds the ivars a class body declares with `has name: Type` or Literal’s `prop :name, Type`,
+	# Finds the ivars a class body declares with `var name: Type` or Literal’s `prop :name, Type`,
 	# as [ivar, type node, stored type name].
 	private def declarations_in(body)
 		statements = (Prism::StatementsNode === body) ? body.body : []
@@ -69,7 +69,7 @@ class Empirical::BaseProcessor < Prism::Visitor
 		statements.flat_map do |statement|
 			case statement
 			in Prism::CallNode[
-				name: :has,
+				name: :var,
 				receiver: nil,
 				arguments: Prism::ArgumentsNode[arguments: [Prism::KeywordHashNode[elements:]]]
 			]

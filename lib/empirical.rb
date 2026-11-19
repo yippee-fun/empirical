@@ -112,7 +112,7 @@ module Empirical
 
 	# Initializes Empirical so that code loaded after this point will:
 	#   1. be guarded against undefined instance variable reads,
-	#   2. have its instance variable writes type checked against `has` declarations,
+	#   2. have its instance variable writes type checked against `var` declarations,
 	#   3. permit users to define type checked method definitions with `fun`, and
 	#   4. call the `defined`, `reopened` and `redefined` hooks when a class or module body closes
 	#
@@ -309,7 +309,7 @@ module Empirical
 	end
 
 	# The ivar types declared on a class and its ancestors. Literal props declared before Empirical
-	# loaded never went through `has`, so they’re read from Literal.
+	# loaded never went through `var`, so they’re read from Literal.
 	private_class_method def self.ivar_types_for(owner)
 		INHERITED_IVAR_TYPES[owner] ||= owner.ancestors.reverse_each.with_object({}) do |ancestor, types|
 			if Literal::Properties === ancestor
@@ -371,8 +371,8 @@ class Module
 		defined
 	end
 
-	# Declares the instance variables this class or module writes, and their types: `has name: String`.
-	private def has(**types)
+	# Declares the instance variables this class or module writes, and their types: `var name: String`.
+	private def var(**types)
 		types.each do |name, type|
 			::Empirical.declare_ivar_type(self, :"@#{name}", type)
 		end
@@ -383,7 +383,7 @@ end
 
 module Empirical::LiteralProperties
 	def prop(name, type, ...)
-		super.tap { has(name => type) }
+		super.tap { var(name => type) }
 	end
 end
 

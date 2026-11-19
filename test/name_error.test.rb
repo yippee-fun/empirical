@@ -1,9 +1,9 @@
 # frozen_string_literal: true
 
 class Example
-	has username: Integer
-	has user: Integer
-	has user_favourites: Integer
+	var username: Integer
+	var user: Integer
+	var user_favourites: Integer
 
 	def initialize
 		@username = 1

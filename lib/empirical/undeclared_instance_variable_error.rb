@@ -2,7 +2,7 @@
 
 class Empirical::UndeclaredInstanceVariableError < ::NameError
 	def initialize(object, name)
-		declaration = "has #{name.name.delete_prefix('@')}: Type"
+		declaration = "var #{name.name.delete_prefix('@')}: Type"
 
 		if Module === object
 			super("Undeclared instance variable `#{name}` on #{object.inspect} itself. Declare it with `class << self; #{declaration}; end`.")

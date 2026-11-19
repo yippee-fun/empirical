@@ -202,8 +202,8 @@ end
 test "a literal written to a typed ivar" do
 	message = static_error(<<~RUBY)
 		class Example
-			has name: String
-			has age: Integer
+			var name: String
+			var age: Integer
 
 			def reset
 				@age = 0
@@ -218,8 +218,8 @@ end
 test "one typed ivar written to another" do
 	message = static_error(<<~RUBY)
 		class Example
-			has name: String
-			has age: Integer
+			var name: String
+			var age: Integer
 
 			def confuse
 				@name = @age
@@ -233,7 +233,7 @@ end
 test "returning a typed ivar whose type can never match" do
 	message = static_error(<<~RUBY)
 		class Example
-			has foo: Integer
+			var foo: Integer
 
 			fun answer => String do
 				@foo
@@ -247,7 +247,7 @@ end
 test "returning a typed ivar early" do
 	message = static_error(<<~RUBY)
 		class Example
-			has foo: Integer
+			var foo: Integer
 
 			fun answer => String do
 				return @foo if rand > 2
@@ -262,9 +262,9 @@ end
 test "returning a typed ivar that fits is fine" do
 	assert_equal static_error(<<~RUBY), nil
 		class Example
-			has name: String
-			has count: _Nilable(Integer)
-			has anything: _Any
+			var name: String
+			var count: _Nilable(Integer)
+			var anything: _Any
 
 			fun name => String do
 				@name
@@ -284,7 +284,7 @@ end
 test "a parameter written to a typed ivar" do
 	message = static_error(<<~RUBY)
 		class Example
-			has name: String
+			var name: String
 
 			fun rename(id = Integer) => void do
 				@name = id
@@ -298,7 +298,7 @@ end
 test "literals and ivars written to typed ivars inside a fun" do
 	literal = static_error(<<~RUBY)
 		class Example
-			has name: String
+			var name: String
 
 			fun reset => void do
 				@name = :nobody
@@ -308,8 +308,8 @@ test "literals and ivars written to typed ivars inside a fun" do
 
 	ivar = static_error(<<~RUBY)
 		class Example
-			has name: String
-			has age: Integer
+			var name: String
+			var age: Integer
 
 			fun confuse => void do
 				@name = @age
@@ -328,7 +328,7 @@ test "ivars in a fun that aren’t known are left to the runtime check" do
 				@foo
 			end
 
-			has foo: Integer
+			var foo: Integer
 
 			fun self.class_level => String do
 				@foo
@@ -344,7 +344,7 @@ test "ivars in a fun that aren’t known are left to the runtime check" do
 				@name = id
 			end
 
-			has name: String
+			var name: String
 		end
 	RUBY
 end
@@ -352,7 +352,7 @@ end
 test "writes to a prop inside a fun are checked inline" do
 	processed = Empirical.process(<<~RUBY, with: Empirical::IvarProcessor)
 		class Example
-			has name: String
+			var name: String
 
 			fun rename(name = String) => void do
 				@name = name
@@ -376,8 +376,8 @@ end
 test "ivar writes that aren’t known are left to the runtime check" do
 	assert_equal static_error(<<~RUBY), nil
 		class Example
-			has name: String
-			has count: Integer
+			var name: String
+			var count: Integer
 
 			def set(value) = @name = value
 			def self.class_level = @name = 1
@@ -390,7 +390,7 @@ test "the class body still evaluates to its last expression" do
 	value = Module.new.module_eval(<<~RUBY)
 		class Example
 			def touch = @name = "a"
-			has name: String
+			var name: String
 		end
 	RUBY
 
@@ -400,7 +400,7 @@ end
 test "checks don’t change line numbers" do
 	source = <<~RUBY
 		class Example
-			has name: String
+			var name: String
 
 			def touch = @name = "a"
 

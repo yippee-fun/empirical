@@ -1,11 +1,11 @@
 # frozen_string_literal: true
 
 class User
-	has name: String, admin: _Boolean
-	has tags: _Array(String)
-	has pair: Array
-	has list: Array
-	has number: Integer
+	var name: String, admin: _Boolean
+	var tags: _Array(String)
+	var pair: Array
+	var list: Array
+	var number: Integer
 
 	attr_accessor :name
 
@@ -72,8 +72,8 @@ class User
 end
 
 class Swapper
-	has first: String
-	has second: String
+	var first: String
+	var second: String
 
 	def call
 		kept = (@first = "a")
@@ -109,7 +109,7 @@ test "writing an undeclared ivar raises" do
 	end
 
 	assert error.message.include?("Undeclared instance variable `@other` on an instance of")
-	assert error.message.include?("Declare it with `has other: Type`.")
+	assert error.message.include?("Declare it with `var other: Type`.")
 end
 
 test "writing an undeclared ivar raises in a class with no props" do
@@ -124,7 +124,7 @@ end
 
 test "objects that override #class are still checked against their real class" do
 	klass = Class.new do
-		has name: String
+		var name: String
 
 		def class = Integer
 		def set(value) = tap { @name = value }
@@ -139,7 +139,7 @@ end
 
 test "modules declare the ivars they write" do
 	mod = Module.new do
-		has count: Integer
+		var count: Integer
 
 		def increment = @count = (defined?(@count) ? @count : 0) + 1
 	end
@@ -152,7 +152,7 @@ end
 test "class-level ivars are declared on the singleton class" do
 	klass = Class.new do
 		class << self
-			has registry: Hash
+			var registry: Hash
 		end
 
 		@registry = {}
@@ -173,7 +173,7 @@ test "class-level ivars are declared on the singleton class" do
 		klass.undeclared
 	end
 
-	assert error.message.include?("Declare it with `class << self; has other: Type; end`.")
+	assert error.message.include?("Declare it with `class << self; var other: Type; end`.")
 
 	assert_raises Empirical::TypeError do
 		klass.wrong
@@ -256,18 +256,18 @@ end
 
 test "a subclass can’t change an inherited ivar to a type that isn’t a subtype" do
 	error = assert_raises ArgumentError do
-		Class.new(User) { has name: Integer }
+		Class.new(User) { var name: Integer }
 	end
 
 	assert error.message.include?("User as String, and Integer isn’t a subtype of it.")
 
 	refute_raises do
-		Class.new(User) { has name: String }
+		Class.new(User) { var name: String }
 	end
 end
 
 class Vehicle
-	has wheels: Numeric
+	var wheels: Numeric
 
 	def fit(wheels)
 		@wheels = wheels
@@ -275,7 +275,7 @@ class Vehicle
 end
 
 class Car < Vehicle
-	has wheels: Integer
+	var wheels: Integer
 end
 
 test "a subclass can narrow an inherited ivar to a subtype" do
@@ -290,7 +290,7 @@ test "the parent’s methods check a narrowed ivar against the subclass" do
 end
 
 class Account
-	has balance: Numeric
+	var balance: Numeric
 
 	def deposit(balance)
 		@balance = balance
@@ -298,7 +298,7 @@ class Account
 end
 
 class Account
-	has balance: Numeric
+	var balance: Numeric
 
 	def withdraw(balance)
 		@balance = balance
@@ -306,11 +306,11 @@ class Account
 end
 
 class Wallet < Account
-	has balance: Integer
+	var balance: Integer
 end
 
 class Account
-	has balance: Numeric
+	var balance: Numeric
 end
 
 test "narrowing covers every body of a reopened parent, and survives the parent declaring again" do
@@ -320,16 +320,16 @@ test "narrowing covers every body of a reopened parent, and survives the parent 
 end
 
 test "an inherited nil type can only narrow to nil" do
-	parent = Class.new { has nothing: nil }
+	parent = Class.new { var nothing: nil }
 
 	assert_raises ArgumentError do
-		Class.new(parent) { has nothing: String }
+		Class.new(parent) { var nothing: String }
 	end
 end
 
 test "falsy types are still checked" do
 	klass = Class.new do
-		has nothing: nil, off: false
+		var nothing: nil, off: false
 		attr_writer :nothing, :off
 	end
 
@@ -360,7 +360,7 @@ test "inline checks don’t share a temporary" do
 
 	processed = Empirical.process(<<~RUBY, with: Empirical::IvarProcessor)
 		class Example
-			has name: String
+			var name: String
 
 			def call
 				@name = "a"
@@ -375,7 +375,7 @@ end
 test "writes to a prop in its own class are checked inline" do
 	processed = Empirical.process(<<~RUBY, with: Empirical::IvarProcessor)
 		class Example
-			has name: String
+			var name: String
 
 			def a = @name = "a"
 			def b = @other = "b"
@@ -386,7 +386,7 @@ test "writes to a prop in its own class are checked inline" do
 
 	lines = processed.lines
 
-	assert lines[1].start_with?("\thas name: ::Empirical::StaticCheck.after(::Empirical::TypeStore.store(")
+	assert lines[1].start_with?("\tvar name: ::Empirical::StaticCheck.after(::Empirical::TypeStore.store(")
 	assert lines[1].include?(%[("a"), __FILE__, 4, "`@name` is assigned")])
 	refute lines[3].include?("= ::Empirical.__check_ivar__(")
 	assert lines[3].include?("::Empirical::TypeStore::T_")

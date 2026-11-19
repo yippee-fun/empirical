@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class Example
-	has bar: String
+	var bar: String
 
 	def initialize
 		@bar = "bar"
@@ -23,7 +23,7 @@ class Example
 end
 
 class BasicObjectExample < BasicObject
-	has bar: ::String
+	var bar: ::String
 
 	def initialize
 		@bar = "bar"

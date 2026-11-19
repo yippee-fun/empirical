@@ -21,7 +21,7 @@ It gives you four things in the files you opt in:
 
 1. [Typed methods](#typed-methods) with `fun`.
 2. [Strict instance variables](#strict-instance-variables): reading an undefined ivar raises instead of returning `nil`.
-3. [Typed instance variables](#typed-instance-variables): every ivar you write is declared with `has` and checked.
+3. [Typed instance variables](#typed-instance-variables): every ivar you write is declared with `var` and checked.
 4. [Definition hooks](#definition-hooks): `defined`, `reopened` and `redefined` run when a class body closes.
 
 Types are [Literal](https://literal.fun) types. Anything that responds to `===` works: classes, ranges, procs, and Literal’s generics like `_Array(String)` or `_Nilable(Integer)`.
@@ -190,11 +190,11 @@ end
 
 ## Typed instance variables
 
-Every instance variable your code writes must be declared with `has`, which gives it a type. Every write is checked, wherever it happens: in the class, in a subclass, or through a writer.
+Every instance variable your code writes must be declared with `var`, which gives it a type. Every write is checked, wherever it happens: in the class, in a subclass, or through a writer.
 
 ```ruby
 class User
-  has name: String, admin: _Boolean
+  var name: String, admin: _Boolean
 
   attr_reader :name
 
@@ -207,13 +207,13 @@ end
 User.new(1) # Empirical::TypeError: Instance variable @name assigned the wrong type.
 ```
 
-`has` only declares. Use `attr_reader`, `attr_writer` and `attr_accessor` for accessors; writers are checked too.
+`var` only declares. Use `attr_reader`, `attr_writer` and `attr_accessor` for accessors; writers are checked too.
 
 Writing an ivar that hasn’t been declared raises an `Empirical::UndeclaredInstanceVariableError`, which also catches typos.
 
 ```ruby
 def rename(name)
-  @nmae = name # Undeclared instance variable `@nmae` on an instance of User. Declare it with `has nmae: Type`.
+  @nmae = name # Undeclared instance variable `@nmae` on an instance of User. Declare it with `var nmae: Type`.
 end
 ```
 
@@ -222,7 +222,7 @@ This applies to your code, in the files you include. Libraries can still set wha
 If you don’t want to constrain an ivar, declare it as `_Any?`. Literal’s `_Any` is anything except `nil`.
 
 ```ruby
-has cache: _Any?
+var cache: _Any?
 ```
 
 Modules declare the ivars they write in the same way. A subclass inherits its parent’s declarations and can’t change their types.
@@ -232,7 +232,7 @@ Ivars on a class or module itself are declared on its singleton class.
 ```ruby
 class Registry
   class << self
-    has entries: Hash
+    var entries: Hash
   end
 
   @entries = {}
@@ -243,12 +243,12 @@ One gap: `instance_variable_set` writes the ivar directly and isn’t checked.
 
 ### With Literal
 
-Literal’s `prop` declares its ivar with `has`, then adds the initializer and any accessors. In a `Literal::Struct`, `Literal::Data`, `Literal::Object`, or any class that extends `Literal::Properties`, writes inside your own methods are checked against the prop’s type.
+Literal’s `prop` declares its ivar with `var`, then adds the initializer and any accessors. In a `Literal::Struct`, `Literal::Data`, `Literal::Object`, or any class that extends `Literal::Properties`, writes inside your own methods are checked against the prop’s type.
 
 ```ruby
 class Person < Literal::Struct
   prop :name, String
-  has nickname: _Nilable(String)
+  var nickname: _Nilable(String)
 
   def rename(name)
     @name = name # checked by Empirical
@@ -256,7 +256,7 @@ class Person < Literal::Struct
 end
 ```
 
-Use `prop` for what the object is made from and `has` for state it keeps.
+Use `prop` for what the object is made from and `var` for state it keeps.
 
 ## Definition hooks
 
@@ -331,7 +331,7 @@ Ivars are checked the same way, because every ivar has a declared type:
 
 ```ruby
 class Counter
-  has count: Integer
+  var count: Integer
 
   fun label => String do
     @count
