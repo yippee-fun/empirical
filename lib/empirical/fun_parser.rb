@@ -33,6 +33,7 @@ class Empirical::FunParser
 		parameters << untyped(signature.block) if Prism::CallNode === signature && signature.block
 
 		ensure_single_splat(parameters, signature)
+		ensure_splat_first(parameters)
 
 		Empirical::Fun.new(
 			call:,
@@ -57,9 +58,7 @@ class Empirical::FunParser
 		in Prism::LocalVariableWriteNode
 			fail!(argument, "A `fun` can’t take positional parameters. Use a keyword parameter, `#{argument.name}: Type`, or `def`.")
 		in Prism::KeywordHashNode
-			parameters = argument.elements.map { |element| keyword_from(element) }
-			ensure_splat_first(parameters)
-			parameters
+			argument.elements.map { |element| keyword_from(element) }
 		in Prism::SplatNode | Prism::ForwardingArgumentsNode
 			untyped(argument)
 		else
@@ -68,8 +67,17 @@ class Empirical::FunParser
 	end
 
 	private def ensure_splat_first(parameters)
-		parameters.drop(1).each do |parameter|
-			fail!(parameter.node, "A positional splat must come before keyword parameters.") if parameter.kind == :positional_splat
+		keyword_seen = false
+
+		parameters.each do |parameter|
+			case parameter
+			in { kind: :keyword | :keyword_splat } | { node: Prism::AssocSplatNode }
+				keyword_seen = true
+			in { kind: :positional_splat } | { node: Prism::SplatNode } if keyword_seen
+				fail!(parameter.node, "A positional splat must come before keyword parameters.")
+			else
+				nil
+			end
 		end
 	end
 

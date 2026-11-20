@@ -163,3 +163,12 @@ test "reserved word as a splat name" do
 
 	assert message.include?("`class` can’t be the name of a splat.")
 end
+
+test "untyped splat after a keyword" do
+	message = signature_error(<<~RUBY)
+		fun foo(name: String, *args) => void do
+		end
+	RUBY
+
+	assert message.include?("A positional splat must come before keyword parameters.")
+end
