@@ -17,15 +17,15 @@ test "block parameter after typed parameters" do
 	mod = Module.new do
 		extend self
 
-		fun example(name = String, greeting: String, &block) => String do
+		fun example(name: String, greeting: String, &block) => String do
 			block.call("#{greeting} #{name}")
 		end
 	end
 
-	assert_equal mod.example("Joel", greeting: "Hello", &:upcase), "HELLO JOEL"
+	assert_equal mod.example(name: "Joel", greeting: "Hello", &:upcase), "HELLO JOEL"
 
 	assert_raises Empirical::TypeError do
-		mod.example(1, greeting: "Hello", &:upcase)
+		mod.example(name: 1, greeting: "Hello", &:upcase)
 	end
 end
 

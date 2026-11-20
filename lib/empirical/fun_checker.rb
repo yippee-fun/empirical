@@ -58,7 +58,7 @@ class Empirical::FunChecker
 	private def ivar_write_checks
 		ivar_writes(@body).filter_map do |write|
 			expected = @ivar_types[write.name]
-			actual = declared_type(write.value, in_block: false) if Prism::LocalVariableReadNode === write.value
+			actual = declared_type(write.value, in_block: false) unless Prism::InstanceVariableReadNode === write.value
 
 			type_check(expected, actual, write, "`#{write.name}` is assigned `#{write.value.slice}`") if expected && actual
 		end
@@ -68,6 +68,9 @@ class Empirical::FunChecker
 	private def declared_type(node, in_block:)
 		case node
 		in Prism::LocalVariableReadNode[name:]
+			known_parameters[name]
+		in Prism::CallNode[name:] if node.variable_call?
+			# Keyword parameters aren't locals in the `fun` source, so Prism parses reading one as a call.
 			known_parameters[name]
 		in Prism::InstanceVariableReadNode[name:] unless in_block
 			@ivar_types[name]

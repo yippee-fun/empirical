@@ -55,49 +55,63 @@ Only files that match are processed, and only when they are loaded after `Empiri
 A `fun` is a `def` with types. The signature comes first, then `=>` and the return type, then a `do ... end` body.
 
 ```ruby
-fun greet(name = String) => String do
+fun greet(name: String) => String do
   "Hello #{name}"
 end
+
+greet(name: "Joel")
 ```
 
 Calling it with the wrong type, or returning the wrong type, raises an `Empirical::TypeError`.
 
 ### Parameters
 
-Each parameter keeps the shape it would have in a `def`. You write the type where the default would go.
+Parameters are keywords. You write the type where the default would go. A `fun` can’t take positional parameters, so use a `def` if you need them.
 
 | You write | You get | Meaning |
 |---|---|---|
-| `name = String` | `name` | Positional |
 | `name: String` | `name:` | Keyword |
 | `name?: String` | `name: nil` | Optional keyword, `nil` when omitted |
-| `names = [String]` | `*names` | Positional splat, each element a `String` |
+| `names: [String]` | `*names` | Positional splat, each element a `String` |
 | `options: { Symbol => String }` | `**options` | Keyword splat with typed keys and values |
 | `*args`, `**kwargs`, `&block` | unchanged | Untyped, for passing straight through |
 
 ```ruby
-fun create(name = String, tags = [Symbol], admin?: _Boolean, &block) => User do
-  # def create(name, *tags, admin: nil, &block)
+fun create(tags: [Symbol], name: String, admin?: _Boolean, &block) => User do
+  # def create(*tags, name:, admin: nil, &block)
 end
+
+create(:a, :b, name: "Joel")
+```
+
+The positional splat is written like the keyword splat, with an Array literal instead of a Hash. It collects positional arguments, so callers don’t pass it as a keyword. It must come first in the signature and can’t be optional, because splats default to an empty Array.
+
+```ruby
+fun sum(numbers: [Integer]) => Integer do
+  numbers.sum
+end
+
+sum(1, 2, 3) # => 6
+sum          # => 0
 ```
 
 ### Defaults
 
-Because the type sits where a default would, defaults go in the block parameters. They are always written as keywords, even for positional parameters.
+Because the type sits where a default would, defaults go in the block parameters.
 
 ```ruby
-fun greet(name = String, punctuation: String) => String do |name: "World", punctuation: "!"|
+fun greet(name: String, punctuation: String) => String do |name: "World", punctuation: "!"|
   "Hello #{name}#{punctuation}"
 end
 
-greet                         # => "Hello World!"
-greet("Joel", punctuation: "?") # => "Hello Joel?"
+greet                                  # => "Hello World!"
+greet(name: "Joel", punctuation: "?")  # => "Hello Joel?"
 ```
 
-A default is type checked like any other value. For an optional positional parameter, make the type nilable and default it to `nil`.
+A default is type checked like any other value. To allow `nil`, make the type nilable and default it to `nil`, or use `name?:`.
 
 ```ruby
-fun greet(name = _Nilable(String)) => String do |name: nil|
+fun greet(name: _Nilable(String)) => String do |name: nil|
   name ? "Hello #{name}" : "Hello"
 end
 ```
@@ -113,15 +127,15 @@ Any type works as a return type. Early returns are checked too. There are three 
 - `itself` means the method returns the object it was called on. Returning any other object, even one of the same class, raises an `Empirical::TypeError`.
 
 ```ruby
-fun log(message = String) => void do
+fun log(message: String) => void do
   puts message
 end
 
-fun fail!(message = String) => never do
+fun fail!(message: String) => never do
   raise Error, message
 end
 
-fun add(item = Item) => itself do
+fun add(item: Item) => itself do
   @items << item
   self
 end
@@ -152,11 +166,11 @@ end
 `Method` and `UnboundMethod` have `parameter_types` and `return_type`. Untyped parameters are left out, and both return `nil` for methods not defined with `fun`.
 
 ```ruby
-fun create(name = String, tags = [Symbol], admin?: _Boolean) => User do
+fun create(tags: [Symbol], name: String, admin?: _Boolean) => User do
   # ...
 end
 
-method(:create).parameter_types # => { name: String, tags: _Array(Symbol), admin: _Nilable(_Boolean) }
+method(:create).parameter_types # => { tags: _Array(Symbol), name: String, admin: _Nilable(_Boolean) }
 method(:create).return_type     # => User
 ```
 
@@ -166,6 +180,7 @@ A `void` method’s return type is `_Void`, a `never` method’s is `_Never`, an
 
 Use a plain `def` for these.
 
+- Positional parameters. Use keywords, or a `def`.
 - Setters (`name=`) and operators (`==`, `[]`, `+`).
 - A `{ ... }` body. It must be `do ... end`.
 - `it` and numbered parameters in the body.
@@ -173,7 +188,7 @@ Use a plain `def` for these.
 Mistakes in a signature are reported when the file loads, with the path and line.
 
 ```
-app/models/user.rb:12: The default for `nmae` doesn’t match a positional or keyword parameter in the signature.
+app/models/user.rb:12: The default for `nmae` doesn’t match a keyword parameter in the signature.
 ```
 
 ## Strict instance variables
@@ -330,7 +345,7 @@ Literals are checked with the real type, so this works for any type, such as `_I
 For a parameter or an ivar, only the declared type is known, not the value. Empirical reports those only when the two types can never overlap. An `Integer` returned as a `String` is an error. A `Numeric` returned as an `Integer` is not, because it might be one at runtime, where it is still checked.
 
 ```ruby
-fun name_of(id = Integer) => String do
+fun name_of(id: Integer) => String do
   id
 end
 # app/user.rb:2: `name_of` returns `id`, which is declared as Integer and can never match String.

@@ -4,7 +4,7 @@ test "parameter types and return type" do
 	mod = Module.new do
 		extend self
 
-		fun example(name = String, tags = [Symbol], admin?: _Boolean, options: { Symbol => Integer }, &block) => Integer do
+		fun example(tags: [Symbol], name: String, admin?: _Boolean, options: { Symbol => Integer }, &block) => Integer do
 			1
 		end
 	end
@@ -12,8 +12,8 @@ test "parameter types and return type" do
 	method = mod.method(:example)
 
 	assert_equal method.parameter_types.transform_values(&:inspect), {
-		name: "String",
 		tags: "_Array(Symbol)",
+		name: "String",
 		admin: "_Nilable(_Boolean)",
 		options: "_Hash(Symbol, Integer)",
 	}
@@ -67,7 +67,7 @@ test "multi-line signatures" do
 		extend self
 
 		private fun example(
-			name = String
+			name: String
 		) => String do |name: "World"|
 			name
 		end
@@ -126,7 +126,7 @@ test "methods defined in eval" do
 	klass = Class.new
 
 	klass.class_eval <<~RUBY, __FILE__, __LINE__ + 1
-		fun example(count = Integer) => Integer do
+		fun example(count: Integer) => Integer do
 			count
 		end
 	RUBY

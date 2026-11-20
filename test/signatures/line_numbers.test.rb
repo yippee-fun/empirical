@@ -2,13 +2,13 @@
 
 SOURCES = {
 	"simple" => <<~RUBY,
-		fun example(name = String, age: Integer) => String do
+		fun example(name: String, age: Integer) => String do
 			__LINE__
 		end
 	RUBY
 	"multi-line signature and types" => <<~RUBY,
 		private fun example(
-			name = String,
+			name: String,
 			options: _Hash(
 				String,
 				Integer
@@ -27,7 +27,7 @@ SOURCES = {
 		after = __LINE__
 	RUBY
 	"multi-line default" => <<~RUBY,
-		fun example(names = Array) => Array do |names: [
+		fun example(names: Array) => Array do |names: [
 			"a",
 			"b",
 		]|
@@ -58,7 +58,7 @@ test "comments in a multi-line type" do
 		extend self
 
 		fun example(
-			value = _Union(
+			value: _Union(
 				String, # a name
 				Integer # or an id
 			)
@@ -67,18 +67,18 @@ test "comments in a multi-line type" do
 		end
 	end
 
-	assert_equal mod.example("a"), __LINE__ - 4
-	assert_equal mod.example(1), __LINE__ - 5
+	assert_equal mod.example(value: "a"), __LINE__ - 4
+	assert_equal mod.example(value: 1), __LINE__ - 5
 
 	assert_raises Empirical::TypeError do
-		mod.example(:a)
+		mod.example(value: :a)
 	end
 end
 
 test "a multi-line string in a type or default is rejected" do
 	error = assert_raises Empirical::TypedSignatureError do
 		Empirical.process(<<~RUBY, with: Empirical::SignatureProcessor)
-			fun example(value = String) => String do |value: [
+			fun example(value: String) => String do |value: [
 				"a
 				b",
 			]|

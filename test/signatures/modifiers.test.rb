@@ -31,7 +31,7 @@ test "evaluates to the method name" do
 	name = nil
 
 	Class.new do
-		name = fun example(value = Integer) => Integer do
+		name = fun example(value: Integer) => Integer do
 			value
 		end
 	end

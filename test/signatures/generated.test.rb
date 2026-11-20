@@ -48,15 +48,15 @@ end
 
 test "parameters keep their Ruby shape" do
 	signature = generated(<<~RUBY).lines.first[/def .*?\)/]
-		fun example(a = String, b = Integer, c = [Symbol], d: String, e?: Integer, f: { Symbol => String }, &block) => void do |b: 1, d: "x"|
+		fun example(c: [Symbol], b: Integer, d: String, e?: Integer, f: { Symbol => String }, &block) => void do |b: 1, d: "x"|
 		end
 	RUBY
 
-	assert_equal signature, %(def example(a, b = 1, *c, d: "x", e: nil, **f, &block))
+	assert_equal signature, %(def example(*c, b: 1, d: "x", e: nil, **f, &block))
 end
 
 test "the same source always generates the same code" do
-	source = "fun example(a = String) => String do\n\ta\nend\n"
+	source = "fun example(a: String) => String do\n\ta\nend\n"
 
 	assert_equal(
 		Empirical.process(source, with: Empirical::SignatureProcessor, path: "a.rb"),

@@ -89,17 +89,11 @@ class Empirical::FunGenerator
 		in :untyped
 			return
 		in :positional_splat
-			insert(node.name_loc.start_offset, "*")
-			replace(node.name_loc.end_offset, type.location.end_offset, "")
+			insert(node.key.location.start_offset, "*")
+			replace(node.key.closing_loc.start_offset, type.location.end_offset, "")
 		in :keyword_splat
 			insert(node.key.location.start_offset, "**")
 			replace(node.key.closing_loc.start_offset, type.location.end_offset, "")
-		in :positional
-			if parameter.default
-				replace(type.location.start_offset, type.location.end_offset, parameter.default)
-			else
-				replace(node.name_loc.end_offset, type.location.end_offset, "")
-			end
 		in :keyword
 			key = node.key
 

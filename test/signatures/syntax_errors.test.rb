@@ -19,7 +19,7 @@ test "errors include the path and line" do
 	message = signature_error(<<~RUBY)
 		x = 1
 
-		fun foo(a = String) do
+		fun foo(a: String) do
 		end
 	RUBY
 
@@ -28,7 +28,7 @@ end
 
 test "missing return type" do
 	message = signature_error(<<~RUBY)
-		fun foo(a = String) do
+		fun foo(a: String) do
 		end
 	RUBY
 
@@ -49,7 +49,7 @@ end
 
 test "setter" do
 	message = signature_error(<<~RUBY)
-		fun name=(value = String) => void do
+		fun name=(value: String) => void do
 		end
 	RUBY
 
@@ -69,7 +69,7 @@ end
 
 test "default for an unknown parameter" do
 	message = signature_error(<<~RUBY)
-		fun foo(name = String) => String do |nmae: "World"|
+		fun foo(name: String) => String do |nmae: "World"|
 			name
 		end
 	RUBY
@@ -79,7 +79,7 @@ end
 
 test "positional block parameter" do
 	message = signature_error(<<~RUBY)
-		fun foo(name = String) => String do |name|
+		fun foo(name: String) => String do |name|
 			name
 		end
 	RUBY
@@ -89,7 +89,7 @@ end
 
 test "two positional splats" do
 	message = signature_error(<<~RUBY)
-		fun foo(a = [String], *b) => void do
+		fun foo(a: [String], *b) => void do
 		end
 	RUBY
 
@@ -106,8 +106,44 @@ test "two keyword splats" do
 end
 
 test "spread types are reserved" do
-	assert signature_error("fun foo(a = [*Type]) => void do\nend").include?("`[*Type]` is reserved")
+	assert signature_error("fun foo(a: [*Type]) => void do\nend").include?("`[*Type]` is reserved")
 	assert signature_error("fun foo(a: { **Type }) => void do\nend").include?("`{**Type}` is reserved")
+end
+
+test "positional parameter" do
+	message = signature_error(<<~RUBY)
+		fun foo(a = String) => void do
+		end
+	RUBY
+
+	assert message.include?("A `fun` can’t take positional parameters. Use a keyword parameter, `a: Type`, or `def`.")
+end
+
+test "positional splat after a keyword" do
+	message = signature_error(<<~RUBY)
+		fun foo(a: String, b: [Integer]) => void do
+		end
+	RUBY
+
+	assert message.include?("A positional splat must come before keyword parameters.")
+end
+
+test "optional positional splat" do
+	message = signature_error(<<~RUBY)
+		fun foo(a?: [Integer]) => void do
+		end
+	RUBY
+
+	assert message.include?("A positional splat can’t be optional.")
+end
+
+test "default for a positional splat" do
+	message = signature_error(<<~RUBY)
+		fun foo(a: [Integer]) => void do |a: []|
+		end
+	RUBY
+
+	assert message.include?("The default for `a` doesn’t match a keyword parameter in the signature.")
 end
 
 test "invalid parameter" do
@@ -117,4 +153,13 @@ test "invalid parameter" do
 	RUBY
 
 	assert message.include?("Invalid parameter `1`")
+end
+
+test "reserved word as a splat name" do
+	message = signature_error(<<~RUBY)
+		fun foo(class: [Integer]) => void do
+		end
+	RUBY
+
+	assert message.include?("`class` can’t be the name of a splat.")
 end

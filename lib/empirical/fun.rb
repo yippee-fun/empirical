@@ -5,8 +5,7 @@ module Empirical
 	Fun = Data.define(:call, :signature, :body, :parameters, :return_type)
 
 	# kind is one of:
-	#   :positional        `a = Type`
-	#   :positional_splat  `a = [Type]`
+	#   :positional_splat  `a: [Type]`
 	#   :keyword           `a: Type` or `a?: Type`
 	#   :keyword_splat     `a: {KeyType => ValueType}`
 	#   :untyped           `*args`, `**kwargs`, `&block` or `...`, which are already valid in a `def`
