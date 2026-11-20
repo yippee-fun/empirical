@@ -64,13 +64,19 @@ module RubyLsp
 					if signature.is_a?(Prism::CallNode) && signature.arguments
 						signature.arguments.arguments.each do |arg|
 							case arg
-							in Prism::LocalVariableWriteNode[name: param_name]
-								parameters << RubyIndexer::Entry::OptionalParameter.new(name: param_name.to_s)
 							in Prism::KeywordHashNode
 								arg.elements.each do |element|
-									param_name = element.key.unescaped
-									parameters << RubyIndexer::Entry::OptionalKeywordParameter.new(name: param_name)
+									case element
+									in Prism::AssocNode[key: Prism::SymbolNode => key, value: Prism::ArrayNode[elements: [_]] => value] if value.opening == "["
+										parameters << RubyIndexer::Entry::RestParameter.new(name: key.unescaped.to_sym)
+									in Prism::AssocNode[key: Prism::SymbolNode => key]
+										parameters << RubyIndexer::Entry::OptionalKeywordParameter.new(name: key.unescaped.delete_suffix("?").to_sym)
+									else
+										nil
+									end
 								end
+							else
+								nil
 							end
 						end
 					end

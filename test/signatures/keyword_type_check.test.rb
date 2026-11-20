@@ -43,18 +43,18 @@ test "raises when a required keyword is missing" do
 	end
 end
 
-test "mixing positional and keyword parameters" do
+test "required and optional keywords" do
 	mod = Module.new do
 		extend self
 
-		fun example(greeting = String, name: String, punctuation?: String) => String do
+		fun example(greeting: String, name: String, punctuation?: String) => String do
 			"#{greeting} #{name}#{punctuation}"
 		end
 	end
 
-	assert_equal mod.method(:example).parameters, [[:req, :greeting], [:keyreq, :name], [:key, :punctuation]]
-	assert_equal mod.example("Hello", name: "Joel"), "Hello Joel"
-	assert_equal mod.example("Hello", name: "Joel", punctuation: "!"), "Hello Joel!"
+	assert_equal mod.method(:example).parameters, [[:keyreq, :greeting], [:keyreq, :name], [:key, :punctuation]]
+	assert_equal mod.example(greeting: "Hello", name: "Joel"), "Hello Joel"
+	assert_equal mod.example(greeting: "Hello", name: "Joel", punctuation: "!"), "Hello Joel!"
 end
 
 test "keyword named after a reserved word" do

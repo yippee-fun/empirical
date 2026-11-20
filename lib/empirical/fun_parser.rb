@@ -3,6 +3,7 @@
 class Empirical::FunParser
 	USAGE = "Expected `fun name(parameters) => ReturnType do ... end`."
 	METHOD_NAME = /\A(?:[A-Za-z_]|[^[:ascii:]])(?:[A-Za-z0-9_]|[^[:ascii:]])*[?!]?\z/
+	LOCAL_NAME = /\A(?:[a-z_]|[^[:ascii:]])(?:[A-Za-z0-9_]|[^[:ascii:]])*\z/
 
 	def initialize(path:)
 		@path = path
@@ -32,6 +33,7 @@ class Empirical::FunParser
 		parameters << untyped(signature.block) if Prism::CallNode === signature && signature.block
 
 		ensure_single_splat(parameters, signature)
+		ensure_splat_first(parameters)
 
 		Empirical::Fun.new(
 			call:,
@@ -53,18 +55,29 @@ class Empirical::FunParser
 
 	private def parameters_from(argument)
 		case argument
-		in Prism::LocalVariableWriteNode[value: Prism::ArrayNode[elements: [Prism::SplatNode], opening_loc: Prism::Location]]
-			fail!(argument, "`[*Type]` is reserved. Use `#{argument.name} = [Type]` to type each element of a splat.")
-		in Prism::LocalVariableWriteNode[name:, value: Prism::ArrayNode[elements: [type], opening_loc: Prism::Location] => value]
-			parameter(:positional_splat, name, argument, value, "::Literal::Types._Array(#{single_line(type)})")
-		in Prism::LocalVariableWriteNode[name:, value:]
-			parameter(:positional, name, argument, value, single_line(value))
+		in Prism::LocalVariableWriteNode
+			fail!(argument, "A `fun` can’t take positional parameters. Use a keyword parameter, `#{argument.name}: Type`, or `def`.")
 		in Prism::KeywordHashNode
 			argument.elements.map { |element| keyword_from(element) }
 		in Prism::SplatNode | Prism::ForwardingArgumentsNode
 			untyped(argument)
 		else
-			fail!(argument, "Invalid parameter `#{argument.slice}`. Use `name = Type` for positional parameters and `name: Type` for keyword parameters.")
+			fail!(argument, "Invalid parameter `#{argument.slice}`. Use `name: Type`.")
+		end
+	end
+
+	private def ensure_splat_first(parameters)
+		keyword_seen = false
+
+		parameters.each do |parameter|
+			case parameter
+			in { kind: :keyword | :keyword_splat } | { node: Prism::AssocSplatNode }
+				keyword_seen = true
+			in { kind: :positional_splat } | { node: Prism::SplatNode } if keyword_seen
+				fail!(parameter.node, "A positional splat must come before keyword parameters.")
+			else
+				nil
+			end
 		end
 	end
 
@@ -78,10 +91,17 @@ class Empirical::FunParser
 			name = name.delete_suffix("?").to_sym
 
 			case value
+			in Prism::ArrayNode[elements: [Prism::SplatNode]] if value.opening == "["
+				fail!(element, "`[*Type]` is reserved. Use `#{name}: [Type]` to type each element of a splat.")
+			in Prism::ArrayNode[elements: [type]] if value.opening == "["
+				fail!(element, "A positional splat can’t be optional.") if optional
+				ensure_local_name(name, element)
+				parameter(:positional_splat, name, element, value, "::Literal::Types._Array(#{single_line(type)})")
 			in Prism::HashNode[elements: [Prism::AssocSplatNode]]
 				fail!(element, "`{**Type}` is reserved. Use `#{name}: {KeyType => ValueType}` to type a keyword splat.")
 			in Prism::HashNode[elements: [Prism::AssocNode[key: key_type, value: value_type]]]
 				fail!(element, "A keyword splat can’t be optional.") if optional
+				ensure_local_name(name, element)
 				parameter(:keyword_splat, name, element, value, "::Literal::Types._Hash(#{single_line(key_type)}, #{single_line(value_type)})")
 			else
 				type_source = optional ? "::Literal::Types._Nilable(#{single_line(value)})" : single_line(value)
@@ -89,6 +109,13 @@ class Empirical::FunParser
 			end
 		else
 			fail!(element, "Invalid keyword parameter `#{element.slice}`. Use `name: Type`.")
+		end
+	end
+
+	# A keyword can be named anything a label can, but a splat has to be a valid local variable.
+	private def ensure_local_name(name, node)
+		unless LOCAL_NAME.match?(name) && !Empirical::FunGenerator::RESERVED_WORDS.include?(name)
+			fail!(node, "`#{name}` can’t be the name of a splat.")
 		end
 	end
 
@@ -112,7 +139,7 @@ class Empirical::FunParser
 		defaults = defaults_from(body)
 
 		parameters = parameters.map do |parameter|
-			if (parameter.kind in :positional | :keyword) && (default = defaults.delete(parameter.name))
+			if parameter.kind == :keyword && (default = defaults.delete(parameter.name))
 				parameter.with(default: single_line(default), default_line: default.location.start_line)
 			else
 				parameter
@@ -120,7 +147,7 @@ class Empirical::FunParser
 		end
 
 		defaults.each do |name, node|
-			fail!(node, "The default for `#{name}` doesn’t match a positional or keyword parameter in the signature.")
+			fail!(node, "The default for `#{name}` doesn’t match a keyword parameter in the signature.")
 		end
 
 		parameters

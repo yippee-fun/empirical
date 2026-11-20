@@ -42,7 +42,7 @@ end
 
 test "both branches of a conditional" do
 	message = static_error(<<~RUBY)
-		fun answer(flag = _Boolean) => String do
+		fun answer(flag: _Boolean) => String do
 			if flag
 				"yes"
 			else
@@ -56,7 +56,7 @@ end
 
 test "an if with no else doesn’t count the missing branch" do
 	assert_equal static_error(<<~RUBY), nil
-		fun answer(flag = _Boolean) => String do
+		fun answer(flag: _Boolean) => String do
 			raise "no" unless flag
 			"yes" if flag
 		end
@@ -133,7 +133,7 @@ test "a class with its own === isn’t compared by ancestry" do
 			def self.===(value) = String === value
 		end
 
-		fun answer(value = Stringish) => String do
+		fun answer(value: Stringish) => String do
 			value
 		end
 	RUBY
@@ -141,7 +141,7 @@ end
 
 test "a literal default of the wrong type" do
 	message = static_error(<<~RUBY)
-		fun repeat(text = String, count: Integer) => String do |count: "twice"|
+		fun repeat(text: String, count: Integer) => String do |count: "twice"|
 			text * count
 		end
 	RUBY
@@ -151,7 +151,7 @@ end
 
 test "a default error points at the line the default is on" do
 	message = static_error(<<~RUBY)
-		fun repeat(text = String, count: Integer) => String do |
+		fun repeat(text: String, count: Integer) => String do |
 			text: "a",
 			count: "twice"
 		|
@@ -170,7 +170,7 @@ end
 
 test "returning a parameter whose type can never match" do
 	message = static_error(<<~RUBY)
-		fun name_of(id = Integer) => String do
+		fun name_of(id: Integer) => String do
 			id
 		end
 	RUBY
@@ -179,24 +179,24 @@ test "returning a parameter whose type can never match" do
 end
 
 test "returning a parameter that is a subtype or might fit is fine" do
-	assert_equal static_error("fun a(x = Integer) => Numeric do\n\tx\nend"), nil
-	assert_equal static_error("fun a(x = Numeric) => Integer do\n\tx\nend"), nil
-	assert_equal static_error("fun a(x = Comparable) => String do\n\tx\nend"), nil
-	assert_equal static_error("fun a(x = _Nilable(String)) => String do\n\tx\nend"), nil
-	assert_equal static_error("fun a(x = _Predicate('even', &:even?)) => String do\n\tx\nend"), nil
+	assert_equal static_error("fun a(x: Integer) => Numeric do\n\tx\nend"), nil
+	assert_equal static_error("fun a(x: Numeric) => Integer do\n\tx\nend"), nil
+	assert_equal static_error("fun a(x: Comparable) => String do\n\tx\nend"), nil
+	assert_equal static_error("fun a(x: _Nilable(String)) => String do\n\tx\nend"), nil
+	assert_equal static_error("fun a(x: _Predicate('even', &:even?)) => String do\n\tx\nend"), nil
 end
 
 test "unions, nilables and containers are compared by what they could contain" do
-	assert static_error("fun a(x = _Nilable(Integer)) => String do\n\tx\nend").include?("can never match String")
-	assert static_error("fun a(x = _Union(Integer, Float)) => _Nilable(String) do\n\tx\nend").include?("can never match")
-	assert static_error("fun a(xs = [Integer]) => String do\n\txs\nend").include?("declared as _Array(Integer)")
-	assert static_error("fun a(x = _Boolean) => Integer do\n\tx\nend").include?("can never match Integer")
+	assert static_error("fun a(x: _Nilable(Integer)) => String do\n\tx\nend").include?("can never match String")
+	assert static_error("fun a(x: _Union(Integer, Float)) => _Nilable(String) do\n\tx\nend").include?("can never match")
+	assert static_error("fun a(xs: [Integer]) => String do\n\txs\nend").include?("declared as _Array(Integer)")
+	assert static_error("fun a(x: _Boolean) => Integer do\n\tx\nend").include?("can never match Integer")
 end
 
 test "a parameter that is reassigned or shadowed isn’t assumed to keep its type" do
-	assert_equal static_error("fun a(x = Integer) => String do\n\tx = x.to_s\n\tx\nend"), nil
-	assert_equal static_error("fun a(x = Integer) => String do\n\tx += 1 if false\n\tx\nend"), nil
-	assert_equal static_error("fun a(x = Integer) => String do\n\t[1].each { |x| return x.to_s }\n\tx\nend"), nil
+	assert_equal static_error("fun a(x: Integer) => String do\n\tx = x.to_s\n\tx\nend"), nil
+	assert_equal static_error("fun a(x: Integer) => String do\n\tx += 1 if false\n\tx\nend"), nil
+	assert_equal static_error("fun a(x: Integer) => String do\n\t[1].each { |x| return x.to_s }\n\tx\nend"), nil
 end
 
 test "a literal written to a typed ivar" do
@@ -286,7 +286,7 @@ test "a parameter written to a typed ivar" do
 		class Example
 			prop :name, String
 
-			fun rename(id = Integer) => void do
+			fun rename(id: Integer) => void do
 				@name = id
 			end
 		end
@@ -334,12 +334,12 @@ test "ivars in a fun that aren’t known are left to the runtime check" do
 				@foo
 			end
 
-			fun in_a_block(items = Array) => String do
+			fun in_a_block(items: Array) => String do
 				items.each { return @foo }
 				"none"
 			end
 
-			fun reassigned(id = Integer) => void do
+			fun reassigned(id: Integer) => void do
 				id = id.to_s
 				@name = id
 			end
@@ -354,7 +354,7 @@ test "writes to a prop inside a fun are checked inline" do
 		class Example
 			prop :name, String
 
-			fun rename(name = String) => void do
+			fun rename(name: String) => void do
 				@name = name
 				tap { @name = name }
 			end
@@ -404,7 +404,7 @@ test "checks don’t change line numbers" do
 
 			def touch = @name = "a"
 
-			fun answer(count = Integer) => Integer do |count: 1|
+			fun answer(count: Integer) => Integer do |count: 1|
 				return 0 if count.zero?
 				count
 			end

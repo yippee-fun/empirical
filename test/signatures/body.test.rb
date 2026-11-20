@@ -53,14 +53,14 @@ test "method-level ensure" do
 	mod = Module.new do
 		extend self
 
-		fun example(log = Array) => String do
+		fun example(log: Array) => String do
 			"Hello"
 		ensure
 			log << :ensured
 		end
 	end
 
-	assert_equal mod.example(log), "Hello"
+	assert_equal mod.example(log:), "Hello"
 	assert_equal log, [:ensured]
 end
 
@@ -68,7 +68,7 @@ test "argument type errors aren’t rescued by the method’s own rescue" do
 	mod = Module.new do
 		extend self
 
-		fun example(name = String) => String do
+		fun example(name: String) => String do
 			name
 		rescue TypeError
 			"rescued"
@@ -76,7 +76,7 @@ test "argument type errors aren’t rescued by the method’s own rescue" do
 	end
 
 	assert_raises Empirical::TypeError do
-		mod.example(1)
+		mod.example(name: 1)
 	end
 end
 
@@ -95,16 +95,16 @@ test "return in a block returns from the method and is checked" do
 	mod = Module.new do
 		extend self
 
-		fun example(items = Array) => String do
+		fun example(items: Array) => String do
 			items.each { |item| return item }
 			"none"
 		end
 	end
 
-	assert_equal mod.example(["a"]), "a"
+	assert_equal mod.example(items: ["a"]), "a"
 
 	assert_raises Empirical::TypeError do
-		mod.example([1])
+		mod.example(items: [1])
 	end
 end
 
@@ -162,33 +162,35 @@ end
 
 test "singleton method on self" do
 	mod = Module.new do
-		fun self.example(name = String) => String do
+		fun self.example(name: String) => String do
 			name
 		end
 	end
 
-	assert_equal mod.example("Joel"), "Joel"
+	assert_equal mod.example(name: "Joel"), "Joel"
 
 	assert_raises Empirical::TypeError do
-		mod.example(1)
+		mod.example(name: 1)
 	end
 end
 
+# rubocop:disable Style/HashSyntax
 test "non-ASCII method and parameter names" do
 	mod = Module.new do
 		extend self
 
-		fun café(größe = Integer) => String do
+		fun café(größe: Integer) => String do
 			"☕" * größe
 		end
 	end
 
-	assert_equal mod.café(2), "☕☕"
+	assert_equal mod.café(größe: 2), "☕☕"
 
 	assert_raises Empirical::TypeError do
-		mod.café("2")
+		mod.café(größe: "2")
 	end
 end
+# rubocop:enable Style/HashSyntax
 
 test "BasicObject subclasses" do
 	klass = Class.new(BasicObject) do
@@ -217,12 +219,12 @@ test "type errors work on objects that override #method" do
 	klass = Class.new do
 		def method = "GET"
 
-		fun example(name = String) => String do
+		fun example(name: String) => String do
 			name
 		end
 	end
 
 	assert_raises Empirical::TypeError do
-		klass.new.example(1)
+		klass.new.example(name: 1)
 	end
 end
