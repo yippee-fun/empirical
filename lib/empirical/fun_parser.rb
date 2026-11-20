@@ -85,6 +85,8 @@ class Empirical::FunParser
 		case element
 		in Prism::AssocSplatNode
 			untyped(element)
+		in Prism::AssocNode[key: Prism::SymbolNode[opening_loc: nil] => key, value: Prism::ImplicitNode]
+			fail!(element, "The keyword parameter `#{key.unescaped}` has no type. Use `#{key.unescaped}: Type`.")
 		in Prism::AssocNode[key: Prism::SymbolNode[opening_loc: nil] => key, value:]
 			name = key.unescaped
 			optional = name.end_with?("?")

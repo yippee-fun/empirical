@@ -1,9 +1,9 @@
 # frozen_string_literal: true
 
 class Example
-	prop :username, Integer
-	prop :user, Integer
-	prop :user_favourites, Integer
+	var username: Integer
+	var user: Integer
+	var user_favourites: Integer
 
 	def initialize
 		@username = 1

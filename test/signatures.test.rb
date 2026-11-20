@@ -55,3 +55,15 @@ test "basic empty function with never return" do
 		foo_6
 	end
 end
+
+test "a keyword parameter without a type is a signature error" do
+	error = assert_raises Empirical::TypedSignatureError do
+		eval <<~RUBY, binding, "untyped_keyword.rb", 1
+			fun foo_untyped(code:) => String do
+				code
+			end
+		RUBY
+	end
+
+	assert error.message.end_with?(":1: The keyword parameter `code` has no type. Use `code: Type`.")
+end

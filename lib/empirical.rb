@@ -48,10 +48,41 @@ module Empirical
 	module Itself; end
 
 	module TypeStore
-		# Redefining replaces the type, so reloading a file doesn’t warn or leak.
-		def self.store(name, type)
+		# The stored types an ivar’s writes are inlined against, by owner and ivar. A class body that
+		# is reopened declares the ivar again, so there can be more than one.
+		INLINED = ObjectSpace::WeakKeyMap.new
+
+		# The ivars a subclass has narrowed, by owner.
+		NARROWED = ObjectSpace::WeakKeyMap.new
+
+		# Stands in for the inlined type of an ivar a subclass has narrowed, so writes in the owner’s
+		# methods take the runtime check, which knows the receiver’s class.
+		module Narrowed
+			def self.===(_value) = false
+		end
+
+		# Redefining replaces the type, so reloading a file doesn’t warn or leak. Returns the type.
+		def self.store(name, type, owner = nil, ivar = nil)
+			narrowed = false
+
+			if owner
+				((INLINED[owner] ||= {})[ivar] ||= Set[]) << name
+				narrowed = NARROWED[owner]&.include?(ivar)
+			end
+
 			remove_const(name) if const_defined?(name, false)
-			const_set(name, type)
+			const_set(name, narrowed ? Narrowed : type)
+
+			type
+		end
+
+		def self.narrow(owner, ivar)
+			(NARROWED[owner] ||= Set[]) << ivar
+
+			INLINED[owner]&.fetch(ivar, nil)&.each do |name|
+				remove_const(name)
+				const_set(name, Narrowed)
+			end
 		end
 
 		MISSING = Object.new.freeze
@@ -81,7 +112,7 @@ module Empirical
 
 	# Initializes Empirical so that code loaded after this point will:
 	#   1. be guarded against undefined instance variable reads,
-	#   2. have its instance variable writes type checked against `prop` declarations,
+	#   2. have its instance variable writes type checked against `var` declarations,
 	#   3. permit users to define type checked method definitions with `fun`, and
 	#   4. call the `defined`, `reopened` and `redefined` hooks when a class or module body closes
 	#
@@ -153,16 +184,25 @@ module Empirical
 		buffer.force_encoding(result.encoding)
 	end
 
+	# A subclass may narrow an inherited ivar to a subtype. The ancestor’s methods then check their
+	# writes against the receiver’s class at runtime, so they can’t write what the subclass rejects.
 	def self.declare_ivar_type(owner, ivar, type)
-		# Methods inherited from an ancestor check writes against the ancestor’s type.
 		owner.ancestors.each do |ancestor|
 			next if ancestor.equal?(owner)
 
 			declared = IVAR_TYPE[ancestor]
 
-			if declared&.key?(ivar) && declared[ivar] != type
-				raise ArgumentError, "#{ivar} is already declared on #{ancestor.inspect} with a different type. A subclass can’t change the type of an inherited prop."
+			next unless declared&.key?(ivar)
+
+			inherited = declared[ivar]
+
+			next if inherited == type
+
+			unless Literal.subtype?(type, inherited)
+				raise ArgumentError, "#{ivar} is declared on #{ancestor.inspect} as #{inherited.inspect}, and #{type.inspect} isn’t a subtype of it. A subclass can only narrow the type of an inherited instance variable."
 			end
+
+			TypeStore.narrow(ancestor, ivar)
 		end
 
 		(IVAR_TYPE[owner] ||= {})[ivar] = type
@@ -252,7 +292,7 @@ module Empirical
 			end
 		end
 
-		# The body may have declared Literal props.
+		# The body may have included a module, which changes the ivars the class inherits.
 		INHERITED_IVAR_TYPES.clear
 
 		SEND_METHOD.bind_call(owner, hook)
@@ -268,7 +308,8 @@ module Empirical
 		false
 	end
 
-	# The ivar types declared on a class and its ancestors, by Empirical’s `prop` or Literal’s.
+	# The ivar types declared on a class and its ancestors. Literal props declared before Empirical
+	# loaded never went through `var`, so they’re read from Literal.
 	private_class_method def self.ivar_types_for(owner)
 		INHERITED_IVAR_TYPES[owner] ||= owner.ancestors.reverse_each.with_object({}) do |ancestor, types|
 			if Literal::Properties === ancestor
@@ -304,10 +345,6 @@ UnboundMethod.include(Empirical::MethodTypes)
 
 Empirical::CLASS_METHOD = Object.instance_method(:class)
 Empirical::SINGLETON_CLASS_METHOD = Object.instance_method(:singleton_class)
-Empirical::INSTANCE_VARIABLE_SET_METHOD = Object.instance_method(:instance_variable_set)
-Empirical::INSTANCE_VARIABLE_GET_METHOD = Object.instance_method(:instance_variable_get)
-Empirical::DEFINE_METHOD_METHOD = Module.instance_method(:define_method)
-Empirical::ATTR_READER_METHOD = Module.instance_method(:attr_reader)
 Empirical::MODULE_EVAL_METHOD = Module.instance_method(:module_eval)
 Empirical::PRIVATE_METHOD_DEFINED_METHOD = Module.instance_method(:private_method_defined?)
 Empirical::PROTECTED_METHOD_DEFINED_METHOD = Module.instance_method(:protected_method_defined?)
@@ -334,42 +371,20 @@ class Module
 		defined
 	end
 
-	# Takes the same arguments as Literal’s `prop`, which adds an initializer on top of this.
-	def prop(name, type, reader: false, writer: false, predicate: false)
-		raise ArgumentError unless reader    in nil | false | :public | :protected | :private
-		raise ArgumentError unless writer    in nil | false | :public | :protected | :private
-		raise ArgumentError unless predicate in nil | false | :public | :protected | :private
-
-		ivar = :"@#{name}"
-
-		::Empirical.declare_ivar_type(self, ivar, type)
-
-		if reader
-			::Empirical::ATTR_READER_METHOD.bind_call(self, name)
-
-			__send__ reader, name
+	# Declares the instance variables this class or module writes, and their types: `var name: String`.
+	private def var(**types)
+		types.each do |name, type|
+			::Empirical.declare_ivar_type(self, :"@#{name}", type)
 		end
 
-		if writer
-			writer_method_name = :"#{name}="
-
-			::Empirical::DEFINE_METHOD_METHOD.bind_call(self, writer_method_name) do |value|
-				::Empirical::INSTANCE_VARIABLE_SET_METHOD.bind_call(self, ivar, ::Empirical.__check_ivar__(self, ivar, value))
-			end
-
-			__send__ writer, writer_method_name
-		end
-
-		if predicate
-			predicate_method_name = :"#{name}?"
-
-			::Empirical::DEFINE_METHOD_METHOD.bind_call(self, predicate_method_name) do
-				!!::Empirical::INSTANCE_VARIABLE_GET_METHOD.bind_call(self, ivar)
-			end
-
-			__send__ predicate, predicate_method_name
-		end
-
-		name
+		nil
 	end
 end
+
+module Empirical::LiteralProperties
+	def prop(name, type, ...)
+		super.tap { var(name => type) }
+	end
+end
+
+Literal::Properties.prepend(Empirical::LiteralProperties)
